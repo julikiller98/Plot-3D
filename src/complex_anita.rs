@@ -7,6 +7,7 @@ use num_complex::{Complex32, ComplexFloat};
 use rand::random;
 use std::ops::Deref;
 use std::simd::f64x2;
+use anita::cranelift::prelude::types::F64X2;
 
 #[derive(Clone, Copy)]
 #[repr(transparent)]
@@ -55,6 +56,8 @@ impl AnitaType for ComplexAnitaType {
     }
 
     fn modulo(builder: &mut FunctionBuilder, value: Value, modulus: Value) -> Value {
+        let re = builder.ins().extractlane(modulus, 0);
+        let modulus= builder.ins().splat(F64X2, re);
         let div = builder.ins().fdiv(value, modulus);
         let trunc = builder.ins().trunc(div);
         let full_div = builder.ins().fmul(trunc, modulus);

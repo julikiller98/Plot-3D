@@ -1,16 +1,16 @@
 use crate::functions::Function;
-use crate::{functions, meshes};
+use crate::wgsl::FunctionMaterial;
+use crate::{functions, meshes, wgsl};
 use anita::jit::JITError;
-use bevy::color::palettes::css::WHITE;
-use bevy::pbr::NotShadowCaster;
+use bevy::pbr::{ExtendedMaterial, NotShadowCaster};
 use bevy::prelude::*;
 use bevy::render::mesh::CylinderMeshBuilder;
 use bevy_egui::egui::{Slider, Widget};
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
-use bevy_flycam::PlayerPlugin;
+use bevy_egui::{egui, EguiContexts};
 use rand::random;
 use std::borrow::Borrow;
 use std::default::Default;
+use std::hash::Hash;
 
 const SIZE: f32 = 10.0;
 const FUNCTION_RADIUS: f32 = SIZE / 400f32;
@@ -21,14 +21,17 @@ pub struct RenderPlugin;
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(SampleRate(DEFAULT_SAMPLE_RATE))
+            .insert_resource(UpdateShader(false))
             .add_systems(Startup, setup)
-            .add_systems(Update, (ui_example_system, update_timed_functions))
             .add_systems(
                 Update,
                 (
+                    function_editor,
+                    update_timed_functions,
                     recompile_changed_expressions,
                     recompile_changed_materials,
                     rebuild_changed_meshes,
+                    update_shader,
                 ),
             );
     }
@@ -37,11 +40,30 @@ impl Plugin for RenderPlugin {
 #[derive(Component)]
 pub struct RenderedFunction {
     color: [f32; 3],
-    expression: String,
+    pub(crate) expression: String,
     function: Function,
 }
+
+#[derive(Component)]
+pub struct TimedFunction;
+
+#[derive(Component)]
+pub struct FunctionParsingError(pub JITError);
+
+#[derive(Component)]
+pub struct ChangedMaterial;
+
+#[derive(Component)]
+pub struct ChangedExpression;
+
+#[derive(Component)]
+pub struct RebuildMesh;
+
 #[derive(Resource)]
 pub struct SampleRate(usize);
+
+#[derive(Resource)]
+pub struct UpdateShader(bool);
 
 pub struct MeshBuildOptions {
     pub sample_rate: usize,
@@ -65,8 +87,18 @@ impl RenderedFunction {
                 Function::TimedPlane(_) => false,
             },
             cull_mode: None,
+            reflectance: 0.0,
             double_sided: true,
             ..default()
+        }
+    }
+
+    pub fn use_shader(&self) -> bool {
+        match self.function {
+            Function::StaticComplex(_) => false,
+            Function::TimedComplex(_) => false,
+            Function::StaticPlane(_) => true,
+            Function::TimedPlane(_) => true,
         }
     }
 
@@ -94,50 +126,20 @@ impl RenderedFunction {
                 32,
                 FUNCTION_RADIUS,
             ),
-            Function::StaticPlane(static_plane) => meshes::create_surface_mesh(
-                |x, y| {
-                    let complex = static_plane(x.into(), y.into());
-                    Vec3::new(x, complex.re, y)
-                },
+            Function::StaticPlane(_static_plane) => meshes::create_surface_mesh(
+                |x, y| Vec3::new(x, 0.0, y),
                 sample_rate / 10,
                 sample_rate / 10,
                 SIZE * 2f32,
             ),
-            Function::TimedPlane(timed_plane) => meshes::create_surface_mesh(
-                |x, y| {
-                    let complex = timed_plane(x.into(), y.into(), time);
-                    Vec3::new(x, complex.re, y)
-                },
+            Function::TimedPlane(_timed_plane) => meshes::create_surface_mesh(
+                |x, y| Vec3::new(x, 0.0, y),
                 sample_rate / 10,
                 sample_rate / 10,
                 SIZE * 2f32,
             ),
         }
     }
-}
-
-pub fn run() -> AppExit {
-    use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
-    App::new()
-        .add_plugins((
-            DefaultPlugins,
-            PlayerPlugin,
-            EguiPlugin,
-            FrameTimeDiagnosticsPlugin::default(),
-        ))
-        .add_plugins(bevy::diagnostic::LogDiagnosticsPlugin::default())
-        .insert_resource(SampleRate(DEFAULT_SAMPLE_RATE))
-        .add_systems(Startup, setup)
-        .add_systems(Update, (ui_example_system, update_timed_functions))
-        .add_systems(
-            Update,
-            (
-                recompile_changed_expressions,
-                recompile_changed_materials,
-                rebuild_changed_meshes,
-            ),
-        )
-        .run()
 }
 
 fn update_timed_functions(
@@ -156,13 +158,18 @@ fn update_timed_functions(
 
 fn recompile_changed_materials(
     mut commands: Commands,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, FunctionMaterial>>>,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction), With<ChangedMaterial>>,
 ) {
     for (entity, mut rendered_function) in rendered_functions.iter_mut() {
         commands
             .entity(entity)
-            .insert(MeshMaterial3d(materials.add(rendered_function.material())))
+            .insert(MeshMaterial3d(materials.add(ExtendedMaterial {
+                base: rendered_function.material(),
+                extension: FunctionMaterial {
+                    function_id: entity.index(),
+                },
+            })))
             .remove::<ChangedMaterial>();
     }
 }
@@ -170,22 +177,23 @@ fn recompile_changed_materials(
 fn recompile_changed_expressions(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction), With<ChangedExpression>>,
     time: Res<Time>,
     mut sample_rate: ResMut<SampleRate>,
+    mut update_shader: ResMut<UpdateShader>,
 ) {
+    let mut force_shader_reload = false;
     for (entity, mut rendered_function) in rendered_functions.iter_mut() {
         append_expression_mesh(
-            &mut commands.entity(entity),
+            &mut commands.entity(entity).remove::<ChangedExpression>(),
             &mut meshes,
             &mut rendered_function,
             MeshBuildOptions::new(sample_rate.0, time.elapsed_secs()),
         );
-        commands
-            .entity(entity)
-            .insert(MeshMaterial3d(materials.add(rendered_function.material())))
-            .remove::<ChangedExpression>();
+        force_shader_reload = force_shader_reload || rendered_function.use_shader();
+    }
+    if force_shader_reload {
+        update_shader.0 = true;
     }
 }
 
@@ -206,7 +214,17 @@ fn rebuild_changed_meshes(
     }
 }
 
-fn ui_example_system(
+fn update_shader(
+    mut update_shader: ResMut<UpdateShader>,
+    rendered_functions: Query<(Entity, &mut RenderedFunction)>,
+) {
+    if update_shader.0 {
+        wgsl::update_function_shader_materials(rendered_functions);
+        update_shader.0 = false;
+    }
+}
+
+fn function_editor(
     mut contexts: EguiContexts,
     mut commands: Commands,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction, Option<&FunctionParsingError>)>,
@@ -253,6 +271,7 @@ fn ui_example_system(
                 },
                 ChangedMaterial,
                 ChangedExpression,
+                NotShadowCaster,
             ));
         }
         ui.label("Sample rate:");
@@ -260,7 +279,7 @@ fn ui_example_system(
             .ui(ui)
             .changed()
         {
-            for (entity, rendered_function, _) in rendered_functions.iter() {
+            for (entity, _, _) in rendered_functions.iter() {
                 commands.entity(entity).insert(RebuildMesh);
             }
         }
@@ -279,7 +298,7 @@ fn append_expression_mesh(
             commands.remove::<FunctionParsingError>().insert(Mesh3d(
                 meshes.add(rendered_function.build_mesh(mesh_build_options)),
             ));
-            if rendered_function.function.is_timed() {
+            if rendered_function.function.rebuild_on_update() {
                 commands.insert(TimedFunction);
             } else {
                 commands.remove::<TimedFunction>();
@@ -301,23 +320,23 @@ fn setup(
         setup_axis(&mut commands, &mut meshes, &mut materials, axis * SIZE, 10);
     }
     commands.spawn((
-        PointLight {
-            intensity: 500_000.0,
-            color: WHITE.into(),
-            radius: 1.0,
+        DirectionalLight {
+            color: Color::WHITE,
+            illuminance: 10000.0, // Adjust brightness
             shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(0.0, 10.0, 0.0),
+        Transform::from_xyz(0.0, 10.0, 0.0).looking_at(Vec3::ZERO, Vec3::Z),
     ));
     commands.spawn((
         RenderedFunction {
             function: Function::StaticPlane(Box::new(|x, y| 0f32.into())),
-            expression: "x;y;0".to_string(),
+            expression: "sin(x) * cos(y + t)".to_string(),
             color: [random(), random(), random()],
         },
         ChangedExpression,
         ChangedMaterial,
+        NotShadowCaster,
     ));
 }
 
@@ -367,18 +386,3 @@ fn setup_axis(
         NotShadowCaster,
     ));
 }
-
-#[derive(Component)]
-pub struct TimedFunction;
-
-#[derive(Component)]
-pub struct FunctionParsingError(pub JITError);
-
-#[derive(Component)]
-pub struct ChangedMaterial;
-
-#[derive(Component)]
-pub struct ChangedExpression;
-
-#[derive(Component)]
-pub struct RebuildMesh;

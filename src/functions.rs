@@ -12,12 +12,12 @@ pub enum Function {
 }
 
 impl Function {
-    pub fn is_timed(&self) -> bool {
+    pub fn rebuild_on_update(&self) -> bool {
         match self {
             Function::StaticComplex(_) => false,
             Function::StaticPlane(_) => false,
             Function::TimedComplex(_) => true,
-            Function::TimedPlane(_) => true,
+            Function::TimedPlane(_) => false,
         }
     }
 }

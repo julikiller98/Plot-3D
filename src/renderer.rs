@@ -126,18 +126,7 @@ impl RenderedFunction {
                 32,
                 FUNCTION_RADIUS,
             ),
-            Function::StaticPlane(_static_plane) => meshes::create_surface_mesh(
-                |x, y| Vec3::new(x, 0.0, y),
-                sample_rate / 10,
-                sample_rate / 10,
-                SIZE * 2f32,
-            ),
-            Function::TimedPlane(_timed_plane) => meshes::create_surface_mesh(
-                |x, y| Vec3::new(x, 0.0, y),
-                sample_rate / 10,
-                sample_rate / 10,
-                SIZE * 2f32,
-            ),
+            Function::StaticPlane(_) | Function::TimedPlane(_) => Plane3d::new(-Dir3::Y.as_vec3(), Vec2::new(SIZE,SIZE)).mesh().subdivisions(sample_rate as u32 / 10).build(),
         }
     }
 }

@@ -120,8 +120,7 @@ fn f(x: f32, y: f32) -> f32{
     let t = globals.time;
     let id = function_material.function_id;
     var z = 0.0;
-    if id == 85 { z = -y;}
-if id == 83 { z = y;}
+    if id == 81 { z = sin(x) * cos(y + t);}
     return z;
 }
 

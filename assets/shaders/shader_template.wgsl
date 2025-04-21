@@ -116,6 +116,10 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     return out;
 }
 
+fn pi() -> f32{
+    return 3.14159265358979323846264338327950288;
+}
+
 fn f(x: f32, y: f32) -> f32{
     let t = globals.time;
     let id = function_material.function_id;

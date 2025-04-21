@@ -16,27 +16,6 @@ const SIZE: f32 = 10.0;
 const FUNCTION_RADIUS: f32 = SIZE / 400f32;
 const DEFAULT_SAMPLE_RATE: usize = 1000;
 
-pub struct RenderPlugin;
-
-impl Plugin for RenderPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(SampleRate(DEFAULT_SAMPLE_RATE))
-            .insert_resource(UpdateShader(false))
-            .add_systems(Startup, setup)
-            .add_systems(
-                Update,
-                (
-                    function_editor,
-                    update_timed_functions,
-                    recompile_changed_expressions,
-                    recompile_changed_materials,
-                    rebuild_changed_meshes,
-                    update_shader,
-                ),
-            );
-    }
-}
-
 #[derive(Component)]
 pub struct RenderedFunction {
     color: [f32; 3],
@@ -126,7 +105,12 @@ impl RenderedFunction {
                 32,
                 FUNCTION_RADIUS,
             ),
-            Function::StaticPlane(_) | Function::TimedPlane(_) => Plane3d::new(-Dir3::Y.as_vec3(), Vec2::new(SIZE,SIZE)).mesh().subdivisions(sample_rate as u32 / 10).build(),
+            Function::StaticPlane(_) | Function::TimedPlane(_) => {
+                Plane3d::new(-Dir3::Y.as_vec3(), Vec2::new(SIZE, SIZE))
+                    .mesh()
+                    .subdivisions(sample_rate as u32 / 10)
+                    .build()
+            }
         }
     }
 }
@@ -208,7 +192,7 @@ fn update_shader(
     rendered_functions: Query<(Entity, &mut RenderedFunction)>,
 ) {
     if update_shader.0 {
-        wgsl::update_function_shader_materials(rendered_functions);
+        wgsl::rebuild_shader_for_functions(rendered_functions);
         update_shader.0 = false;
     }
 }
@@ -218,6 +202,7 @@ fn function_editor(
     mut commands: Commands,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction, Option<&FunctionParsingError>)>,
     mut sample_rate: ResMut<SampleRate>,
+    mut reload_shaders: ResMut<UpdateShader>
 ) {
     egui::Window::new("Functions").show(contexts.ctx_mut(), |ui| {
         let mut index = 0usize;
@@ -245,6 +230,7 @@ fn function_editor(
                 }
                 if ui.button("X").clicked() {
                     commands.entity(entity).despawn_recursive();
+                    reload_shaders.0 = true;
                 }
             });
             if let Some(error) = err {
@@ -300,35 +286,6 @@ fn append_expression_mesh(
     }
 }
 
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    for axis in [Vec3::X, Vec3::Y, Vec3::Z, -Vec3::X, -Vec3::Y, -Vec3::Z] {
-        setup_axis(&mut commands, &mut meshes, &mut materials, axis * SIZE, 10);
-    }
-    commands.spawn((
-        DirectionalLight {
-            color: Color::WHITE,
-            illuminance: 10000.0, // Adjust brightness
-            shadows_enabled: true,
-            ..default()
-        },
-        Transform::from_xyz(0.0, 10.0, 0.0).looking_at(Vec3::ZERO, Vec3::Z),
-    ));
-    commands.spawn((
-        RenderedFunction {
-            function: Function::StaticPlane(Box::new(|x, y| 0f32.into())),
-            expression: "sin(x) * cos(y + t)".to_string(),
-            color: [random(), random(), random()],
-        },
-        ChangedExpression,
-        ChangedMaterial,
-        NotShadowCaster,
-    ));
-}
-
 fn setup_axis(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -374,4 +331,55 @@ fn setup_axis(
         })),
         NotShadowCaster,
     ));
+}
+
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for axis in [Vec3::X, Vec3::Y, Vec3::Z, -Vec3::X, -Vec3::Y, -Vec3::Z] {
+        setup_axis(&mut commands, &mut meshes, &mut materials, axis * SIZE, 10);
+    }
+    commands.spawn((
+        DirectionalLight {
+            color: Color::WHITE,
+            illuminance: 10000.0,
+            shadows_enabled: true,
+            ..default()
+        },
+        Transform::from_xyz(0.0, 10.0, 0.0).looking_at(Vec3::ZERO, Vec3::Z),
+    ));
+    let default_fn_expression = "-x ** x".to_string();
+    commands.spawn((
+        RenderedFunction {
+            function: functions::parse_anita_fn(default_fn_expression.clone()).expect("default function should be valid"),
+            expression: default_fn_expression,
+            color: [random(), random(), random()],
+        },
+        ChangedExpression,
+        ChangedMaterial,
+        NotShadowCaster,
+    ));
+}
+
+pub struct RenderPlugin;
+
+impl Plugin for RenderPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(SampleRate(DEFAULT_SAMPLE_RATE))
+            .insert_resource(UpdateShader(true))
+            .add_systems(Startup, setup)
+            .add_systems(
+                Update,
+                (
+                    function_editor,
+                    update_timed_functions,
+                    recompile_changed_expressions,
+                    recompile_changed_materials,
+                    rebuild_changed_meshes,
+                    update_shader,
+                ),
+            );
+    }
 }

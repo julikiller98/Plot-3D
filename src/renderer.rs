@@ -44,6 +44,12 @@ pub struct SampleRate(usize);
 #[derive(Resource)]
 pub struct UpdateShader(bool);
 
+#[derive(Component)]
+pub struct Axis;
+
+#[derive(Resource)]
+pub struct RenderAxis(bool);
+
 pub struct MeshBuildOptions {
     pub sample_rate: usize,
     pub time: f32,
@@ -111,6 +117,16 @@ impl RenderedFunction {
                     .subdivisions(sample_rate as u32 / 10)
                     .build()
             }
+        }
+    }
+}
+
+fn check_axis_visibility(render_axis: Res<RenderAxis>,mut commands: Commands, axis: Query<(Entity), With<Axis>>) {
+    for (entity) in axis.iter() {
+        if render_axis.0 {
+            commands.entity(entity).insert(Visibility::Visible);
+        } else {
+            commands.entity(entity).insert(Visibility::Hidden);
         }
     }
 }
@@ -202,7 +218,8 @@ fn function_editor(
     mut commands: Commands,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction, Option<&FunctionParsingError>)>,
     mut sample_rate: ResMut<SampleRate>,
-    mut reload_shaders: ResMut<UpdateShader>
+    mut reload_shaders: ResMut<UpdateShader>,
+    mut render_axis: ResMut<RenderAxis>,
 ) {
     egui::Window::new("Functions").show(contexts.ctx_mut(), |ui| {
         let mut index = 0usize;
@@ -258,6 +275,8 @@ fn function_editor(
                 commands.entity(entity).insert(RebuildMesh);
             }
         }
+
+        ui.checkbox(&mut render_axis.0, "Show Axis: ");
     });
 }
 
@@ -304,6 +323,7 @@ fn setup_axis(
                 ..default()
             })),
             NotShadowCaster,
+            Axis
         ));
     }
     commands.spawn((
@@ -320,6 +340,7 @@ fn setup_axis(
             ..default()
         })),
         NotShadowCaster,
+        Axis
     ));
     commands.spawn((
         Mesh3d(meshes.add(Sphere::new(0.02f32 * dir.length()))),
@@ -330,6 +351,7 @@ fn setup_axis(
             ..default()
         })),
         NotShadowCaster,
+        Axis,
     ));
 }
 
@@ -369,6 +391,7 @@ impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(SampleRate(DEFAULT_SAMPLE_RATE))
             .insert_resource(UpdateShader(true))
+            .insert_resource(RenderAxis(true))
             .add_systems(Startup, setup)
             .add_systems(
                 Update,
@@ -379,6 +402,7 @@ impl Plugin for RenderPlugin {
                     recompile_changed_materials,
                     rebuild_changed_meshes,
                     update_shader,
+                    check_axis_visibility
                 ),
             );
     }

@@ -15,7 +15,6 @@ mod functions;
 mod meshes;
 mod renderer;
 mod wgsl;
-
 pub fn main() {
     App::new()
         .add_plugins((

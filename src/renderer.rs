@@ -203,12 +203,15 @@ fn rebuild_changed_meshes(
     }
 }
 
+
 fn update_shader(
     mut update_shader: ResMut<UpdateShader>,
+    asset_server: Res<AssetServer>,
+    mut asset_event_writer: EventWriter<AssetEvent<Shader>>,
     rendered_functions: Query<(Entity, &mut RenderedFunction)>,
 ) {
     if update_shader.0 {
-        wgsl::rebuild_shader_for_functions(rendered_functions);
+        wgsl::rebuild_shader_for_functions(rendered_functions, asset_server,&mut asset_event_writer);
         update_shader.0 = false;
     }
 }

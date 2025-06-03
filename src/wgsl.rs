@@ -21,12 +21,12 @@ pub struct FunctionMaterial {
     pub function_id: u32,
 }
 
-pub fn rebuild_shader_for_functions(rendered_functions: Query<(Entity, &mut RenderedFunction)>,asset_server: Res<AssetServer>, asset_event_writer: &mut EventWriter<AssetEvent<Shader>>){
+pub fn rebuild_shader_for_functions(rendered_functions: Query<(Entity, &mut RenderedFunction)>,asset_server: Res<AssetServer>){
     let functions = rendered_functions.iter().filter(|(e,r)| r.use_shader()).map(|(entity, mut rendered_function)| {
-        format!("if id == {} {{ z = {};}}", entity.index(),  rendered_function.expression)
+        format!("if id == {} {{ z = {};}}", rendered_function.function_id,  rendered_function.expression)
     }).reduce(|a,b| format!("{}\n    {}",a,b)).unwrap_or(String::from(""));
     std::fs::write("assets/".to_owned() + SHADER_ASSET_PATH, SHADER_TEMPLATE_PATH.to_string().replace(FUNCTION_INJECTION_KEY, functions.as_str())).expect("Unable to write custom shader!");
-    asset_event_writer.send(AssetEvent::Modified{id: asset_server.load(SHADER_ASSET_PATH).id()});
+    asset_server.reload(SHADER_ASSET_PATH)
 }
 
 impl MaterialExtension for FunctionMaterial {

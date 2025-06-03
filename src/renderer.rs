@@ -11,6 +11,7 @@ use rand::random;
 use std::borrow::Borrow;
 use std::default::Default;
 use std::hash::Hash;
+use bevy::tasks::futures_lite::StreamExt;
 
 const SIZE: f32 = 10.0;
 const FUNCTION_RADIUS: f32 = SIZE / 400f32;
@@ -21,6 +22,7 @@ pub struct RenderedFunction {
     color: [f32; 3],
     pub(crate) expression: String,
     function: Function,
+    pub(crate) function_id: u32,
 }
 
 #[derive(Component)]
@@ -49,6 +51,17 @@ pub struct Axis;
 
 #[derive(Resource)]
 pub struct RenderAxis(bool);
+
+#[derive(Resource)]
+
+pub struct FunctionIdCounter(u32);
+
+impl FunctionIdCounter {
+    pub fn next_id(&mut self) -> u32 {
+        self.0 += 1;
+        self.0
+    }
+}
 
 pub struct MeshBuildOptions {
     pub sample_rate: usize,
@@ -156,7 +169,7 @@ fn recompile_changed_materials(
             .insert(MeshMaterial3d(materials.add(ExtendedMaterial {
                 base: rendered_function.material(),
                 extension: FunctionMaterial {
-                    function_id: entity.index(),
+                    function_id: rendered_function.function_id,
                 },
             })))
             .remove::<ChangedMaterial>();
@@ -207,11 +220,10 @@ fn rebuild_changed_meshes(
 fn update_shader(
     mut update_shader: ResMut<UpdateShader>,
     asset_server: Res<AssetServer>,
-    mut asset_event_writer: EventWriter<AssetEvent<Shader>>,
     rendered_functions: Query<(Entity, &mut RenderedFunction)>,
 ) {
     if update_shader.0 {
-        wgsl::rebuild_shader_for_functions(rendered_functions, asset_server,&mut asset_event_writer);
+        wgsl::rebuild_shader_for_functions(rendered_functions, asset_server);
         update_shader.0 = false;
     }
 }
@@ -223,19 +235,20 @@ fn function_editor(
     mut sample_rate: ResMut<SampleRate>,
     mut reload_shaders: ResMut<UpdateShader>,
     mut render_axis: ResMut<RenderAxis>,
+    mut function_id_counter: ResMut<FunctionIdCounter>
 ) {
     egui::Window::new("Functions").show(contexts.ctx_mut(), |ui| {
-        let mut index = 0usize;
-        for (entity, mut rendered_function, err) in rendered_functions.iter_mut().sort::<Entity>() {
+        for (entity, mut rendered_function, err) in rendered_functions.iter_mut().sort_by::<&RenderedFunction>(
+            |a,b| a.function_id.cmp(&b.function_id)
+        ){
             ui.horizontal(|ui| {
                 ui.add_sized(
                     [30.0, 20.0],
                     egui::Label::new(
-                        format!("{:?}(x)= ", (('f' as usize) + index) as u8 as char)
+                        format!("{:?}(x)= ", (('f' as u32) + rendered_function.function_id) as u8 as char)
                             .replace("'", ""),
                     ),
                 );
-                index += 1;
                 if ui
                     .text_edit_singleline(&mut rendered_function.expression)
                     .changed()
@@ -263,6 +276,7 @@ fn function_editor(
                     color: [random(), random(), random()],
                     expression: "".to_string(),
                     function: Function::StaticPlane(Box::new(|x, y| 0f32.into())),
+                    function_id: function_id_counter.next_id(),
                 },
                 ChangedMaterial,
                 ChangedExpression,
@@ -362,6 +376,7 @@ fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut function_id_counter: ResMut<FunctionIdCounter>
 ) {
     for axis in [Vec3::X, Vec3::Y, Vec3::Z, -Vec3::X, -Vec3::Y, -Vec3::Z] {
         setup_axis(&mut commands, &mut meshes, &mut materials, axis * SIZE, 10);
@@ -381,6 +396,7 @@ fn setup(
             function: functions::parse_anita_fn(default_fn_expression.clone()).expect("default function should be valid"),
             expression: default_fn_expression,
             color: [random(), random(), random()],
+            function_id: function_id_counter.next_id(),
         },
         ChangedExpression,
         ChangedMaterial,
@@ -395,6 +411,7 @@ impl Plugin for RenderPlugin {
         app.insert_resource(SampleRate(DEFAULT_SAMPLE_RATE))
             .insert_resource(UpdateShader(true))
             .insert_resource(RenderAxis(true))
+            .insert_resource(FunctionIdCounter(1))
             .add_systems(Startup, setup)
             .add_systems(
                 Update,

@@ -14,6 +14,9 @@
 
 struct FunctionMaterial {
     function_id: u32,
+    padding0: u32,
+    padding1: u32,
+    padding2: u32
 }
 
 @group(2) @binding(100)

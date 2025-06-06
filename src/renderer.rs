@@ -1,7 +1,6 @@
 use crate::functions::Function;
-use crate::wgsl::FunctionMaterial;
+use crate::wgsl::{CustomShaderProvider, FunctionMaterial};
 use crate::{functions, meshes, wgsl};
-use anita::jit::JITError;
 use bevy::pbr::{ExtendedMaterial, NotShadowCaster};
 use bevy::prelude::*;
 use bevy::render::mesh::CylinderMeshBuilder;
@@ -11,6 +10,7 @@ use rand::random;
 use std::borrow::Borrow;
 use std::default::Default;
 use std::hash::Hash;
+use bevy::asset::io::{AssetSource, AssetSourceId};
 use bevy::tasks::futures_lite::StreamExt;
 
 const SIZE: f32 = 10.0;
@@ -29,7 +29,7 @@ pub struct RenderedFunction {
 pub struct TimedFunction;
 
 #[derive(Component)]
-pub struct FunctionParsingError(pub JITError);
+pub struct FunctionParsingError(pub String);
 
 #[derive(Component)]
 pub struct ChangedMaterial;
@@ -170,6 +170,9 @@ fn recompile_changed_materials(
                 base: rendered_function.material(),
                 extension: FunctionMaterial {
                     function_id: rendered_function.function_id,
+                    padding0: 0,
+                    padding1: 0,
+                    padding2: 0
                 },
             })))
             .remove::<ChangedMaterial>();
@@ -390,7 +393,7 @@ fn setup(
         },
         Transform::from_xyz(0.0, 10.0, 0.0).looking_at(Vec3::ZERO, Vec3::Z),
     ));
-    let default_fn_expression = "-x ** x".to_string();
+    let default_fn_expression = "-x * x".to_string();
     commands.spawn((
         RenderedFunction {
             function: functions::parse_anita_fn(default_fn_expression.clone()).expect("default function should be valid"),
@@ -408,7 +411,9 @@ pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(SampleRate(DEFAULT_SAMPLE_RATE))
+
+        app
+            .insert_resource(SampleRate(DEFAULT_SAMPLE_RATE))
             .insert_resource(UpdateShader(true))
             .insert_resource(RenderAxis(true))
             .insert_resource(FunctionIdCounter(1))

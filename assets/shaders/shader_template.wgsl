@@ -14,9 +14,9 @@
 
 struct FunctionMaterial {
     function_id: u32,
-    padding0: u32,
-    padding1: u32,
-    padding2: u32
+    scale: f32,
+    offset_x: f32,
+    offset_y: f32
 }
 
 @group(2) @binding(100)
@@ -119,13 +119,15 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     return out;
 }
 
-fn pi() -> f32{
-    return 3.14159265358979323846264338327950288;
-}
+const pi = 3.14159265358979323846264338327950288;
 
-fn f(x: f32, y: f32) -> f32{
+const e = 2.71828182845904523536028747135266250;
+
+fn f(ix: f32, iy: f32) -> f32{
     let t = globals.time;
     let id = function_material.function_id;
+    let x = function_material.scale * (ix + function_material.offset_x);
+    let y = function_material.scale * (iy + function_material.offset_y);
     var z = 0.0;
     {{FUNCTIONS}}
     return z;

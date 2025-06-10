@@ -1,5 +1,5 @@
 use crate::functions::Function;
-use crate::wgsl::{CustomShaderProvider, FunctionMaterial};
+use crate::wgsl::FunctionMaterial;
 use crate::{functions, meshes, wgsl};
 use bevy::pbr::{ExtendedMaterial, NotShadowCaster};
 use bevy::prelude::*;
@@ -10,23 +10,32 @@ use rand::random;
 use std::borrow::Borrow;
 use std::default::Default;
 use std::hash::Hash;
-use bevy::asset::io::{AssetSource, AssetSourceId};
-use bevy::tasks::futures_lite::StreamExt;
+use crate::expression::Expr;
+use crate::expression::Expr::Exp;
 
 const SIZE: f32 = 10.0;
 const FUNCTION_RADIUS: f32 = SIZE / 400f32;
-const DEFAULT_SAMPLE_RATE: usize = 1000;
+const DEFAULT_RESOLUTION: usize = 10000;
 
 #[derive(Component)]
 pub struct RenderedFunction {
     color: [f32; 3],
     pub(crate) expression: String,
-    function: Function,
+    pub (crate) function: Function,
     pub(crate) function_id: u32,
 }
+#[derive(Resource)]
+pub struct Scale(pub f32);
 
-#[derive(Component)]
-pub struct TimedFunction;
+#[derive(Resource)]
+pub struct OffsetX(pub f32);
+
+#[derive(Resource)]
+pub struct OffsetY(pub f32);
+
+#[derive(Resource)]
+pub struct Resolution(pub usize);
+
 
 #[derive(Component)]
 pub struct FunctionParsingError(pub String);
@@ -39,9 +48,6 @@ pub struct ChangedExpression;
 
 #[derive(Component)]
 pub struct RebuildMesh;
-
-#[derive(Resource)]
-pub struct SampleRate(usize);
 
 #[derive(Resource)]
 pub struct UpdateShader(bool);
@@ -78,12 +84,7 @@ impl RenderedFunction {
     fn material(&self) -> StandardMaterial {
         StandardMaterial {
             base_color: Color::srgb(self.color[0], self.color[1], self.color[2]),
-            unlit: match self.function {
-                Function::StaticComplex(_) => true,
-                Function::TimedComplex(_) => true,
-                Function::StaticPlane(_) => false,
-                Function::TimedPlane(_) => false,
-            },
+            unlit: false,
             cull_mode: None,
             reflectance: 0.0,
             double_sided: true,
@@ -91,46 +92,13 @@ impl RenderedFunction {
         }
     }
 
-    pub fn use_shader(&self) -> bool {
-        match self.function {
-            Function::StaticComplex(_) => false,
-            Function::TimedComplex(_) => false,
-            Function::StaticPlane(_) => true,
-            Function::TimedPlane(_) => true,
-        }
-    }
 
     fn build_mesh(&self, options: MeshBuildOptions) -> Mesh {
-        let time = options.time.into();
         let sample_rate = options.sample_rate;
-        match &self.function {
-            Function::StaticComplex(static_function) => meshes::create_tube_mesh(
-                |x: f32| {
-                    let non_normalised_x = (x - 0.5) * SIZE * 2f32;
-                    let complex = static_function(non_normalised_x.into());
-                    Vec3::new(non_normalised_x, complex.re, complex.im)
-                },
-                sample_rate,
-                32,
-                FUNCTION_RADIUS,
-            ),
-            Function::TimedComplex(timed_function) => meshes::create_tube_mesh(
-                |x: f32| {
-                    let non_normalised_x = (x - 0.5) * SIZE * 2f32;
-                    let complex = timed_function(non_normalised_x.into(), time);
-                    Vec3::new(non_normalised_x, complex.re, complex.im)
-                },
-                sample_rate,
-                32,
-                FUNCTION_RADIUS,
-            ),
-            Function::StaticPlane(_) | Function::TimedPlane(_) => {
-                Plane3d::new(-Dir3::Y.as_vec3(), Vec2::new(SIZE, SIZE))
-                    .mesh()
-                    .subdivisions(sample_rate as u32 / 10)
-                    .build()
-            }
-        }
+        Plane3d::new(-Dir3::Y.as_vec3(), Vec2::new(SIZE, SIZE))
+            .mesh()
+            .subdivisions(sample_rate as u32 / 10)
+            .build()
     }
 }
 
@@ -144,24 +112,14 @@ fn check_axis_visibility(render_axis: Res<RenderAxis>,mut commands: Commands, ax
     }
 }
 
-fn update_timed_functions(
-    mut rendered_functions: Query<(Entity, &RenderedFunction, &Mesh3d), With<(TimedFunction)>>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    time: Res<Time>,
-    sample_rate: Res<SampleRate>,
-) {
-    for (entity, timed_function, _) in rendered_functions.iter_mut() {
-        let build_options = MeshBuildOptions::new(sample_rate.0, time.elapsed_secs());
-        let new_mesh = timed_function.build_mesh(build_options);
-        commands.entity(entity).insert(Mesh3d(meshes.add(new_mesh)));
-    }
-}
 
 fn recompile_changed_materials(
     mut commands: Commands,
     mut materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, FunctionMaterial>>>,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction), With<ChangedMaterial>>,
+    offset_x: Res<OffsetX>,
+    offset_y: Res<OffsetY>,
+    scale: Res<Scale>
 ) {
     for (entity, mut rendered_function) in rendered_functions.iter_mut() {
         commands
@@ -170,9 +128,9 @@ fn recompile_changed_materials(
                 base: rendered_function.material(),
                 extension: FunctionMaterial {
                     function_id: rendered_function.function_id,
-                    padding0: 0,
-                    padding1: 0,
-                    padding2: 0
+                    scale: scale.0,
+                    offset_x: offset_x.0,
+                    offset_y: offset_y.0,
                 },
             })))
             .remove::<ChangedMaterial>();
@@ -184,21 +142,16 @@ fn recompile_changed_expressions(
     mut meshes: ResMut<Assets<Mesh>>,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction), With<ChangedExpression>>,
     time: Res<Time>,
-    mut sample_rate: ResMut<SampleRate>,
+    mut resolution: ResMut<Resolution>,
     mut update_shader: ResMut<UpdateShader>,
 ) {
-    let mut force_shader_reload = false;
     for (entity, mut rendered_function) in rendered_functions.iter_mut() {
-        append_expression_mesh(
+        update_shader.0 = update_shader.0 | append_expression_mesh(
             &mut commands.entity(entity).remove::<ChangedExpression>(),
             &mut meshes,
             &mut rendered_function,
-            MeshBuildOptions::new(sample_rate.0, time.elapsed_secs()),
+            MeshBuildOptions::new(resolution.0, time.elapsed_secs()),
         );
-        force_shader_reload = force_shader_reload || rendered_function.use_shader();
-    }
-    if force_shader_reload {
-        update_shader.0 = true;
     }
 }
 
@@ -207,13 +160,13 @@ fn rebuild_changed_meshes(
     mut meshes: ResMut<Assets<Mesh>>,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction), With<RebuildMesh>>,
     time: Res<Time>,
-    mut sample_rate: ResMut<SampleRate>,
+    mut resolution: ResMut<Resolution>,
 ) {
     for (entity, mut rendered_function) in rendered_functions.iter_mut() {
         commands
             .entity(entity)
             .insert(Mesh3d(meshes.add(rendered_function.build_mesh(
-                MeshBuildOptions::new(sample_rate.0, time.elapsed_secs()),
+                MeshBuildOptions::new(resolution.0, time.elapsed_secs()),
             ))))
             .remove::<RebuildMesh>();
     }
@@ -235,7 +188,10 @@ fn function_editor(
     mut contexts: EguiContexts,
     mut commands: Commands,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction, Option<&FunctionParsingError>)>,
-    mut sample_rate: ResMut<SampleRate>,
+    mut resolution: ResMut<Resolution>,
+    mut offset_x: ResMut<OffsetX>,
+    mut offset_y: ResMut<OffsetY>,
+    mut scale: ResMut<Scale>,
     mut reload_shaders: ResMut<UpdateShader>,
     mut render_axis: ResMut<RenderAxis>,
     mut function_id_counter: ResMut<FunctionIdCounter>
@@ -256,6 +212,7 @@ fn function_editor(
                     .text_edit_singleline(&mut rendered_function.expression)
                     .changed()
                 {
+
                     commands.entity(entity).insert(ChangedExpression);
                 }
                 if ui
@@ -278,7 +235,9 @@ fn function_editor(
                 RenderedFunction {
                     color: [random(), random(), random()],
                     expression: "".to_string(),
-                    function: Function::StaticPlane(Box::new(|x, y| 0f32.into())),
+                    function: Function{
+                        expression: Expr::parse_string("x".to_string()).unwrap()
+                    },
                     function_id: function_id_counter.next_id(),
                 },
                 ChangedMaterial,
@@ -286,16 +245,47 @@ fn function_editor(
                 NotShadowCaster,
             ));
         }
-        ui.label("Sample rate:");
-        if Slider::new(&mut sample_rate.0, 100usize..=10000usize)
-            .ui(ui)
-            .changed()
-        {
-            for (entity, _, _) in rendered_functions.iter() {
-                commands.entity(entity).insert(RebuildMesh);
-            }
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label("Scale:");
+                ui.add_space(4.8);
+                ui.label("Resolution:");
+                ui.add_space(4.8);
+                ui.label("Offset x:");
+                ui.add_space(4.8);
+                ui.label("Offset y:");
+            });
+            ui.vertical(|ui| {
+                if Slider::new(&mut scale.0, 0f32..=10f32)
+                    .ui(ui)
+                    .changed()
+                {
+                    for (entity, _, _) in rendered_functions.iter() {
+                        commands.entity(entity).insert(ChangedMaterial);
+                    }
+                }
+                if Slider::new(&mut resolution.0, 100usize..=10000usize)
+                    .ui(ui)
+                    .changed()
+                {
+                    for (entity, _, _) in rendered_functions.iter() {
+                        commands.entity(entity).insert(RebuildMesh);
+                    }
+                }
+                if Slider::new(&mut offset_x.0, -10f32..=10f32)
+                    .ui(ui)
+                    .changed() ||
+                    Slider::new(&mut offset_y.0, -10f32..=10f32)
+                        .ui(ui)
+                        .changed()
+                {
+                    for (entity, _, _) in rendered_functions.iter() {
+                        commands.entity(entity).insert(ChangedMaterial);
+                    }
+                }
+            })
         }
-
+        );
         ui.checkbox(&mut render_axis.0, "Show Axis: ");
     });
 }
@@ -305,22 +295,23 @@ fn append_expression_mesh(
     mut meshes: &mut ResMut<Assets<Mesh>>,
     mut rendered_function: &mut RenderedFunction,
     mesh_build_options: MeshBuildOptions,
-) {
+) -> bool{
+    let last_expression = rendered_function.function.expression.clone();
     match functions::parse_anita_fn(rendered_function.expression.clone()) {
         Ok(function) => {
+            if function.expression == last_expression {
+                return false;
+            }
             rendered_function.function = function;
             commands.remove::<FunctionParsingError>().insert(Mesh3d(
                 meshes.add(rendered_function.build_mesh(mesh_build_options)),
             ));
-            if rendered_function.function.rebuild_on_update() {
-                commands.insert(TimedFunction);
-            } else {
-                commands.remove::<TimedFunction>();
-            }
             commands.remove::<FunctionParsingError>();
+            true
         }
         Err(err) => {
             commands.insert(FunctionParsingError(err));
+            false
         }
     }
 }
@@ -393,11 +384,12 @@ fn setup(
         },
         Transform::from_xyz(0.0, 10.0, 0.0).looking_at(Vec3::ZERO, Vec3::Z),
     ));
-    let default_fn_expression = "-x * x".to_string();
+    let default_fn_expression_0 = "e ** (x * sin(y))".to_string();
+    let default_fn_expression_1 = "e ** (x * sin(y + t))".to_string();
     commands.spawn((
         RenderedFunction {
-            function: functions::parse_anita_fn(default_fn_expression.clone()).expect("default function should be valid"),
-            expression: default_fn_expression,
+            function: functions::parse_anita_fn(default_fn_expression_0.clone()).expect("default function should be valid"),
+            expression: default_fn_expression_1,
             color: [random(), random(), random()],
             function_id: function_id_counter.next_id(),
         },
@@ -411,18 +403,19 @@ pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
-
         app
-            .insert_resource(SampleRate(DEFAULT_SAMPLE_RATE))
+            .insert_resource(Resolution(DEFAULT_RESOLUTION))
+            .insert_resource(OffsetX(0f32))
+            .insert_resource(OffsetY(0f32))
+            .insert_resource(Scale(1f32))
             .insert_resource(UpdateShader(true))
-            .insert_resource(RenderAxis(true))
+            .insert_resource(RenderAxis(false))
             .insert_resource(FunctionIdCounter(1))
             .add_systems(Startup, setup)
             .add_systems(
                 Update,
                 (
                     function_editor,
-                    update_timed_functions,
                     recompile_changed_expressions,
                     recompile_changed_materials,
                     rebuild_changed_meshes,

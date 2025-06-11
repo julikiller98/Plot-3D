@@ -1,25 +1,17 @@
 use crate::functions::Function;
 use crate::wgsl::FunctionMaterial;
-use crate::{functions, meshes, wgsl};
+use crate::{functions, wgsl};
 use bevy::pbr::{ExtendedMaterial, NotShadowCaster};
 use bevy::prelude::*;
 use bevy::render::mesh::CylinderMeshBuilder;
-use bevy_egui::egui::{Slider, Widget};
-use bevy_egui::{egui, EguiContexts};
 use rand::random;
-use std::borrow::Borrow;
-use std::default::Default;
-use std::hash::Hash;
-use crate::expression::Expr;
-use crate::expression::Expr::Exp;
 
 const SIZE: f32 = 10.0;
-const FUNCTION_RADIUS: f32 = SIZE / 400f32;
 const DEFAULT_RESOLUTION: usize = 10000;
 
 #[derive(Component)]
 pub struct RenderedFunction {
-    color: [f32; 3],
+    pub(crate) color: [f32; 3],
     pub(crate) expression: String,
     pub (crate) function: Function,
     pub(crate) function_id: u32,
@@ -36,7 +28,6 @@ pub struct OffsetY(pub f32);
 #[derive(Resource)]
 pub struct Resolution(pub usize);
 
-
 #[derive(Component)]
 pub struct FunctionParsingError(pub String);
 
@@ -50,13 +41,13 @@ pub struct ChangedExpression;
 pub struct RebuildMesh;
 
 #[derive(Resource)]
-pub struct UpdateShader(bool);
+pub struct UpdateShader(pub(crate) bool);
 
 #[derive(Component)]
 pub struct Axis;
 
 #[derive(Resource)]
-pub struct RenderAxis(bool);
+pub struct RenderAxis(pub(crate) bool);
 
 #[derive(Resource)]
 
@@ -71,12 +62,11 @@ impl FunctionIdCounter {
 
 pub struct MeshBuildOptions {
     pub sample_rate: usize,
-    pub time: f32,
 }
 
 impl MeshBuildOptions {
-    pub fn new(sample_rate: usize, time: f32) -> Self {
-        Self { sample_rate, time }
+    pub fn new(sample_rate: usize) -> Self {
+        Self { sample_rate }
     }
 }
 
@@ -102,8 +92,8 @@ impl RenderedFunction {
     }
 }
 
-fn check_axis_visibility(render_axis: Res<RenderAxis>,mut commands: Commands, axis: Query<(Entity), With<Axis>>) {
-    for (entity) in axis.iter() {
+fn check_axis_visibility(render_axis: Res<RenderAxis>,mut commands: Commands, axis: Query<Entity, With<Axis>>) {
+    for entity in axis.iter() {
         if render_axis.0 {
             commands.entity(entity).insert(Visibility::Visible);
         } else {
@@ -121,7 +111,7 @@ fn recompile_changed_materials(
     offset_y: Res<OffsetY>,
     scale: Res<Scale>
 ) {
-    for (entity, mut rendered_function) in rendered_functions.iter_mut() {
+    for (entity, rendered_function) in rendered_functions.iter_mut() {
         commands
             .entity(entity)
             .insert(MeshMaterial3d(materials.add(ExtendedMaterial {
@@ -141,8 +131,7 @@ fn recompile_changed_expressions(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction), With<ChangedExpression>>,
-    time: Res<Time>,
-    mut resolution: ResMut<Resolution>,
+    resolution: ResMut<Resolution>,
     mut update_shader: ResMut<UpdateShader>,
 ) {
     for (entity, mut rendered_function) in rendered_functions.iter_mut() {
@@ -150,7 +139,7 @@ fn recompile_changed_expressions(
             &mut commands.entity(entity).remove::<ChangedExpression>(),
             &mut meshes,
             &mut rendered_function,
-            MeshBuildOptions::new(resolution.0, time.elapsed_secs()),
+            MeshBuildOptions::new(resolution.0),
         );
     }
 }
@@ -159,14 +148,13 @@ fn rebuild_changed_meshes(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction), With<RebuildMesh>>,
-    time: Res<Time>,
-    mut resolution: ResMut<Resolution>,
+    resolution: ResMut<Resolution>,
 ) {
-    for (entity, mut rendered_function) in rendered_functions.iter_mut() {
+    for (entity, rendered_function) in rendered_functions.iter_mut() {
         commands
             .entity(entity)
             .insert(Mesh3d(meshes.add(rendered_function.build_mesh(
-                MeshBuildOptions::new(resolution.0, time.elapsed_secs()),
+                MeshBuildOptions::new(resolution.0),
             ))))
             .remove::<RebuildMesh>();
     }
@@ -184,129 +172,23 @@ fn update_shader(
     }
 }
 
-fn function_editor(
-    mut contexts: EguiContexts,
-    mut commands: Commands,
-    mut rendered_functions: Query<(Entity, &mut RenderedFunction, Option<&FunctionParsingError>)>,
-    mut resolution: ResMut<Resolution>,
-    mut offset_x: ResMut<OffsetX>,
-    mut offset_y: ResMut<OffsetY>,
-    mut scale: ResMut<Scale>,
-    mut reload_shaders: ResMut<UpdateShader>,
-    mut render_axis: ResMut<RenderAxis>,
-    mut function_id_counter: ResMut<FunctionIdCounter>
-) {
-    egui::Window::new("Functions").show(contexts.ctx_mut(), |ui| {
-        for (entity, mut rendered_function, err) in rendered_functions.iter_mut().sort_by::<&RenderedFunction>(
-            |a,b| a.function_id.cmp(&b.function_id)
-        ){
-            ui.horizontal(|ui| {
-                ui.add_sized(
-                    [30.0, 20.0],
-                    egui::Label::new(
-                        format!("{:?}(x)= ", (('f' as u32) + rendered_function.function_id) as u8 as char)
-                            .replace("'", ""),
-                    ),
-                );
-                if ui
-                    .text_edit_singleline(&mut rendered_function.expression)
-                    .changed()
-                {
-
-                    commands.entity(entity).insert(ChangedExpression);
-                }
-                if ui
-                    .color_edit_button_rgb(&mut rendered_function.color)
-                    .changed()
-                {
-                    commands.entity(entity).insert(ChangedMaterial);
-                }
-                if ui.button("X").clicked() {
-                    commands.entity(entity).despawn_recursive();
-                    reload_shaders.0 = true;
-                }
-            });
-            if let Some(error) = err {
-                ui.label(format!("{:?}", error.0));
-            }
-        }
-        if ui.button("+").clicked() {
-            commands.spawn((
-                RenderedFunction {
-                    color: [random(), random(), random()],
-                    expression: "".to_string(),
-                    function: Function{
-                        expression: Expr::parse_string("x".to_string()).unwrap()
-                    },
-                    function_id: function_id_counter.next_id(),
-                },
-                ChangedMaterial,
-                ChangedExpression,
-                NotShadowCaster,
-            ));
-        }
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.label("Scale:");
-                ui.add_space(4.8);
-                ui.label("Resolution:");
-                ui.add_space(4.8);
-                ui.label("Offset x:");
-                ui.add_space(4.8);
-                ui.label("Offset y:");
-            });
-            ui.vertical(|ui| {
-                if Slider::new(&mut scale.0, 0f32..=10f32)
-                    .ui(ui)
-                    .changed()
-                {
-                    for (entity, _, _) in rendered_functions.iter() {
-                        commands.entity(entity).insert(ChangedMaterial);
-                    }
-                }
-                if Slider::new(&mut resolution.0, 100usize..=10000usize)
-                    .ui(ui)
-                    .changed()
-                {
-                    for (entity, _, _) in rendered_functions.iter() {
-                        commands.entity(entity).insert(RebuildMesh);
-                    }
-                }
-                if Slider::new(&mut offset_x.0, -10f32..=10f32)
-                    .ui(ui)
-                    .changed() ||
-                    Slider::new(&mut offset_y.0, -10f32..=10f32)
-                        .ui(ui)
-                        .changed()
-                {
-                    for (entity, _, _) in rendered_functions.iter() {
-                        commands.entity(entity).insert(ChangedMaterial);
-                    }
-                }
-            })
-        }
-        );
-        ui.checkbox(&mut render_axis.0, "Show Axis: ");
-    });
-}
-
 fn append_expression_mesh(
-    mut commands: &mut EntityCommands,
-    mut meshes: &mut ResMut<Assets<Mesh>>,
-    mut rendered_function: &mut RenderedFunction,
+    commands: &mut EntityCommands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    rendered_function: &mut RenderedFunction,
     mesh_build_options: MeshBuildOptions,
 ) -> bool{
     let last_expression = rendered_function.function.expression.clone();
     match functions::parse_anita_fn(rendered_function.expression.clone()) {
         Ok(function) => {
+            commands.remove::<FunctionParsingError>();
             if function.expression == last_expression {
                 return false;
             }
             rendered_function.function = function;
-            commands.remove::<FunctionParsingError>().insert(Mesh3d(
+            commands.insert(Mesh3d(
                 meshes.add(rendered_function.build_mesh(mesh_build_options)),
             ));
-            commands.remove::<FunctionParsingError>();
             true
         }
         Err(err) => {
@@ -415,12 +297,11 @@ impl Plugin for RenderPlugin {
             .add_systems(
                 Update,
                 (
-                    function_editor,
                     recompile_changed_expressions,
                     recompile_changed_materials,
                     rebuild_changed_meshes,
+                    check_axis_visibility,
                     update_shader,
-                    check_axis_visibility
                 ),
             );
     }

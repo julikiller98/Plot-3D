@@ -1,0 +1,17 @@
+[package]
+name = "math-utils"
+version = "0.1.0"
+edition = "2021"
+
+[profile.release]
+lto = true
+debug = true
+#opt-level = 'z'
+
+[dependencies]
+bevy = { version = "0.15.3", features = ["bevy_dev_tools"] }
+bevy_flycam = "*"
+num-complex = "0.4"
+bevy_egui = "0.33.0"
+rand = "0.8.5"
+peg = "0.8.5"

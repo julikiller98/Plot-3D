@@ -14,13 +14,14 @@ use bevy::utils::default;
 use bevy::window::{Window, WindowMode, WindowPlugin};
 use bevy_egui::EguiPlugin;
 use bevy_flycam::PlayerPlugin;
+use crate::editor::FunctionEditorPlugin;
 use crate::wgsl::{CustomShaderProvider, FunctionMaterial};
 
 mod functions;
-mod meshes;
 mod renderer;
 mod wgsl;
 mod expression;
+mod editor;
 
 pub fn main() {
     App::new()
@@ -42,17 +43,12 @@ pub fn main() {
             FpsOverlayPlugin {
                 config: FpsOverlayConfig {
                     text_config: TextFont {
-                        // Here we define size of our overlay
                         font_size: 10.0,
-                        // If we want, we can use a custom font
                         font: default(),
-                        // We could also disable font smoothing,
                         font_smoothing: FontSmoothing::default(),
                         ..default()
                     },
-                    // We can also change color of the overlay
                     text_color: Color::WHITE,
-                    // We can also set the refresh interval for the FPS counter
                     enabled: true,
                 },
             },
@@ -60,6 +56,7 @@ pub fn main() {
             EguiPlugin,
             MaterialPlugin::<ExtendedMaterial<StandardMaterial, FunctionMaterial>>::default(),
             RenderPlugin,
+            FunctionEditorPlugin
         ))
         .run();
 }

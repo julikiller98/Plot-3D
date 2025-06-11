@@ -1,6 +1,3 @@
-use std::fmt::format;
-use bevy::render::render_resource::encase::private::RuntimeSizedArray;
-use bevy_egui::egui::TextBuffer;
 use crate::expression::Expr;
 
 pub struct Function {

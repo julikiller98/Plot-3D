@@ -13,16 +13,7 @@ pub enum Expr {
     Div { lhs: Box<Expr>, rhs: Box<Expr> },
     Mod { lhs: Box<Expr>, rhs: Box<Expr> },
     Exp { lhs: Box<Expr>, rhs: Box<Expr> },
-    Eq { lhs: Box<Expr>, rhs: Box<Expr> },
-    Neq { lhs: Box<Expr>, rhs: Box<Expr> },
-    Gt { lhs: Box<Expr>, rhs: Box<Expr> },
-    Lt { lhs: Box<Expr>, rhs: Box<Expr> },
-    Geq { lhs: Box<Expr>, rhs: Box<Expr> },
-    Leq { lhs: Box<Expr>, rhs: Box<Expr> },
-    And { lhs: Box<Expr>, rhs: Box<Expr> },
-    Or { lhs: Box<Expr>, rhs: Box<Expr> },
-    Not { value: Box<Expr> },
-    Neg { value: Box<Expr> },
+    Neg { value: Box<Expr> }
 }
 
 impl Expr {
@@ -53,16 +44,7 @@ impl Expr {
             Expr::Div { lhs, rhs } => format!("({}) / ({})", lhs.to_string(), rhs.to_string()),
             Expr::Mod { lhs, rhs } => format!("({}) % ({})", lhs.to_string(), rhs.to_string()),
             Expr::Exp { lhs, rhs } => format!("pow({},{})", lhs.to_string(), rhs.to_string()),
-            Expr::Neg { value } => format!("-{}", value.to_string()),
-            Expr::Eq { lhs, rhs } => format!("({}) == ({})", lhs.to_string(), rhs.to_string()),
-            Expr::Neq { lhs, rhs } => format!("({}) != ({})", lhs.to_string(), rhs.to_string()),
-            Expr::Gt { lhs, rhs } => format!("({}) > ({})", lhs.to_string(), rhs.to_string()),
-            Expr::Lt { lhs, rhs } => format!("({}) < ({})", lhs.to_string(), rhs.to_string()),
-            Expr::Geq { lhs, rhs } => format!("({}) >= ({})", lhs.to_string(), rhs.to_string()),
-            Expr::Leq { lhs, rhs } => format!("({}) <= ({})", lhs.to_string(), rhs.to_string()),
-            Expr::And { lhs, rhs } => format!("({}) && ({})", lhs.to_string(), rhs.to_string()),
-            Expr::Or { lhs, rhs } => format!("({}) || ({})", lhs.to_string(), rhs.to_string()),
-            Expr::Not { value } => format!("!({})", value.to_string()),
+            Expr::Neg { value } => format!("-{}", value.to_string())
         }
     }
 
@@ -83,20 +65,12 @@ impl Expr {
             | Expr::Mul { lhs, rhs }
             | Expr::Div { lhs, rhs }
             | Expr::Mod { lhs, rhs }
-            | Expr::Exp { lhs, rhs }
-            | Expr::Eq { lhs, rhs }
-            | Expr::Gt { lhs, rhs }
-            | Expr::Lt { lhs, rhs }
-            | Expr::Geq { lhs, rhs }
-            | Expr::Leq { lhs, rhs }
-            | Expr::And { lhs, rhs }
-            | Expr::Or { lhs, rhs } => {
+            | Expr::Exp { lhs, rhs } => {
                 lhs.walk(consumer);
                 rhs.walk(consumer);
             }
-            Expr::Neg { value } | Expr::Not { value } => value.walk(consumer),
+            Expr::Neg { value } => value.walk(consumer),
             Expr::Const { .. } | Expr::VariableRead { .. } => {}
-            _ => {}
         }
     }
 }
@@ -109,16 +83,6 @@ peg::parser!(pub grammar parser() for str {
     = precedence!{
         l:literal() { Expr::Const { value: l } }
         --
-        a:(@) _ "&&" _ b:@ { Expr::And{ lhs: Box::new(a), rhs: Box::new(b) } }
-        a:(@) _ "||" _ b:@ { Expr::Or{ lhs: Box::new(a), rhs: Box::new(b) } }
-        --
-        a:(@) _ "==" _ b:@ { Expr::Eq{ lhs: Box::new(a), rhs: Box::new(b) } }
-        a:(@) _ "!=" _ b:@ { Expr::Neq{ lhs: Box::new(a), rhs: Box::new(b) } }
-        a:(@) _ ">"  _ b:@ { Expr::Gt{ lhs: Box::new(a), rhs: Box::new(b) } }
-        a:(@) _ ">=" _ b:@ { Expr::Geq{ lhs: Box::new(a), rhs: Box::new(b) } }
-        a:(@) _ "<"  _ b:@ { Expr::Lt{ lhs: Box::new(a), rhs: Box::new(b) } }
-        a:(@) _ "<=" _ b:@ { Expr::Leq{ lhs: Box::new(a), rhs: Box::new(b) } }
-        --
         a:(@) _ "+" _ b:@ { Expr::Add{ lhs: Box::new(a), rhs: Box::new(b) } }
         a:(@) _ "-" _ b:@ { Expr::Sub{ lhs: Box::new(a), rhs: Box::new(b) } }
         --
@@ -127,7 +91,6 @@ peg::parser!(pub grammar parser() for str {
         a:(@) _ "%" _ b:@ { Expr::Mod{ lhs: Box::new(a), rhs: Box::new(b) } }
         --
         a:(@) _ "**" _ b:@ { Expr::Exp{ lhs: Box::new(a), rhs: Box::new(b) } }
-        "!" a:@ { Expr::Not{ value: Box::new(a) } }
         "-" a:@  { Expr::Neg { value: Box::new(a) } }
         "(" _ e:operations() _ ")" { e }
         --

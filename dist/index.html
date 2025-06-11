@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+<link rel="modulepreload" href="/math-utils-b829ead1945055c9.js" crossorigin="anonymous" integrity="sha384-RJjkITo1bpJ/puxlqGf1KBcXqPEV0W99tdt+qUsx/QrV3/puyQcY0Hwt27IK9xyo"><link rel="preload" href="/math-utils-b829ead1945055c9_bg.wasm" crossorigin="anonymous" integrity="sha384-Oid24hggI2rZk32Ay30TLe7ZfMKZ3mXMbvP//o58tVszpduxApKtXMGNGX3vViCC" as="fetch" type="application/wasm"></head>
+<body>
+
+
+<script type="module">
+import init, * as bindings from '/math-utils-b829ead1945055c9.js';
+const wasm = await init({ module_or_path: '/math-utils-b829ead1945055c9_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script></body>
+</html>

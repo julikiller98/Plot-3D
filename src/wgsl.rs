@@ -1,18 +1,12 @@
-use std::fmt::format;
-use std::fs::File;
-use std::iter::Empty;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, LazyLock, Mutex};
-use bevy::asset::{Asset, AssetEvent, AssetLoader, AssetServer, Assets, AsyncReadExt, LoadContext};
-use bevy::asset::io::{AssetReader, AssetReaderError, AssetReaderFuture, AssetSourceEvent, PathStream, Reader, StackFuture};
-use bevy::asset::io::memory::{Dir, DirStream, MemoryAssetReader, Value};
-use bevy::pbr::{ExtendedMaterial, Material, MaterialExtension, StandardMaterial};
-use bevy::prelude::{AlphaMode, Entity, EventWriter, Query, Res, ResMut, Shader, TypePath, With};
-use bevy::reflect::erased_serde::__private::serde::de::Unexpected::Str;
+use std::path::{Path};
+use std::sync::{LazyLock, Mutex};
+use bevy::asset::{Asset, AssetServer};
+use bevy::asset::io::{AssetReader, AssetReaderError, PathStream, Reader};
+use bevy::asset::io::memory::{Dir, MemoryAssetReader};
+use bevy::pbr::MaterialExtension;
+use bevy::prelude::{Entity, Query, Res, TypePath};
 use bevy::render::render_resource::{AsBindGroup, ShaderRef};
-use bevy::utils::ConditionalSendFuture;
-use crate::functions::Function;
-use crate::renderer::{ChangedExpression, ChangedMaterial, RenderedFunction};
+use crate::renderer::RenderedFunction;
 
 
 const CUSTOM_SHADER_NAME: &str  = "shader.wgsl";
@@ -43,7 +37,7 @@ pub fn rebuild_shader_for_functions(rendered_functions: Query<(Entity, &mut Rend
 }
 
 fn populate_template_shader(rendered_functions: Query<(Entity, &mut RenderedFunction)>) -> String {
-    let functions = rendered_functions.iter().map(|(entity, mut rendered_function)| {
+    let functions = rendered_functions.iter().map(|(_entity, rendered_function)| {
         format!("if id == {} {{ z = {};}}", rendered_function.function_id, rendered_function.function.expression.to_string())
     }).reduce(|a, b| format!("{}\n    {}", a, b)).unwrap_or(String::from(""));
     SHADER_TEMPLATE_PATH.to_string().replace(FUNCTION_INJECTION_KEY, functions.as_str())

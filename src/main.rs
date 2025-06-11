@@ -12,9 +12,8 @@ use bevy::prelude::{MonitorSelection, TextFont};
 use bevy::text::FontSmoothing;
 use bevy::utils::default;
 use bevy::window::{Window, WindowMode, WindowPlugin};
-use bevy_egui::EguiPlugin;
-use bevy_flycam::PlayerPlugin;
 use crate::editor::FunctionEditorPlugin;
+use crate::player::PlayerPlugin;
 use crate::wgsl::{CustomShaderProvider, FunctionMaterial};
 
 mod functions;
@@ -22,6 +21,7 @@ mod renderer;
 mod wgsl;
 mod expression;
 mod editor;
+mod player;
 
 pub fn main() {
     App::new()
@@ -50,10 +50,11 @@ pub fn main() {
                     },
                     text_color: Color::WHITE,
                     enabled: true,
+                    ..default()
                 },
             },
             PlayerPlugin,
-            EguiPlugin,
+            bevy_egui::EguiPlugin{ enable_multipass_for_primary_context: false },
             MaterialPlugin::<ExtendedMaterial<StandardMaterial, FunctionMaterial>>::default(),
             RenderPlugin,
             FunctionEditorPlugin

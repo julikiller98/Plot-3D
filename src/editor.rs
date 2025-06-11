@@ -5,13 +5,13 @@ use crate::renderer::{
     RebuildMesh, RenderAxis, RenderedFunction, Resolution, Scale, UpdateShader,
 };
 use bevy::app::{App, Plugin, Update};
-use bevy::hierarchy::DespawnRecursiveExt;
 use bevy::pbr::NotShadowCaster;
 use bevy::prelude::{Commands, Entity, Mut, Query, ResMut};
 use bevy_egui::egui::{Slider, Ui, Widget};
 use bevy_egui::{egui, EguiContexts};
 use rand::random;
 use std::ops::RangeInclusive;
+use bevy::render::view::NoFrustumCulling;
 
 pub struct FunctionEditorPlugin;
 
@@ -112,6 +112,7 @@ fn add_empty_function(
         ChangedMaterial,
         ChangedExpression,
         NotShadowCaster,
+        NoFrustumCulling
     ));
 }
 
@@ -188,7 +189,7 @@ fn edit_function_ui(
             commands.entity(entity).insert(ChangedMaterial);
         }
         if ui.button("X").clicked() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
             reload_shaders.0 = true;
         }
     });

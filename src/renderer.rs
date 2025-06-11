@@ -4,6 +4,7 @@ use crate::{functions, wgsl};
 use bevy::pbr::{ExtendedMaterial, NotShadowCaster};
 use bevy::prelude::*;
 use bevy::render::mesh::CylinderMeshBuilder;
+use bevy::render::view::NoFrustumCulling;
 use rand::random;
 
 const SIZE: f32 = 10.0;
@@ -99,6 +100,12 @@ fn check_axis_visibility(render_axis: Res<RenderAxis>,mut commands: Commands, ax
         } else {
             commands.entity(entity).insert(Visibility::Hidden);
         }
+    }
+}
+
+fn other_visibility(mut commands: Commands, axis: Query<Entity, Without<Axis>>) {
+    for entity in axis.iter() {
+        commands.entity(entity).insert(Visibility::Visible);
     }
 }
 
@@ -278,6 +285,7 @@ fn setup(
         ChangedExpression,
         ChangedMaterial,
         NotShadowCaster,
+        NoFrustumCulling
     ));
 }
 
@@ -301,6 +309,7 @@ impl Plugin for RenderPlugin {
                     recompile_changed_materials,
                     rebuild_changed_meshes,
                     check_axis_visibility,
+                    other_visibility,
                     update_shader,
                 ),
             );

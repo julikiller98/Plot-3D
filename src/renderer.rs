@@ -20,14 +20,37 @@ pub struct RenderedFunction {
 #[derive(Resource)]
 pub struct Scale(pub f32);
 
+impl Default for Scale {
+    fn default() -> Self {
+        Self(1.0)
+    }
+}
+
 #[derive(Resource)]
 pub struct OffsetX(pub f32);
+
+impl Default for OffsetX {
+    fn default() -> Self {
+        Self(0.0)
+    }
+}
 
 #[derive(Resource)]
 pub struct OffsetY(pub f32);
 
+impl Default for OffsetY {
+    fn default() -> Self {
+        Self(0.0)
+    }
+}
+
 #[derive(Resource)]
 pub struct Resolution(pub usize);
+impl Default for Resolution {
+    fn default() -> Self {
+        Self(DEFAULT_RESOLUTION)
+    }
+}
 
 #[derive(Component)]
 pub struct FunctionParsingError(pub String);
@@ -294,10 +317,10 @@ pub struct RenderPlugin;
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
         app
-            .insert_resource(Resolution(DEFAULT_RESOLUTION))
-            .insert_resource(OffsetX(0f32))
-            .insert_resource(OffsetY(0f32))
-            .insert_resource(Scale(1f32))
+            .init_resource::<Resolution>()
+            .init_resource::<OffsetX>()
+            .init_resource::<OffsetY>()
+            .init_resource::<Scale>()
             .insert_resource(UpdateShader(true))
             .insert_resource(RenderAxis(false))
             .insert_resource(FunctionIdCounter(1))

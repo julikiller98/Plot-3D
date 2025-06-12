@@ -12,6 +12,15 @@ pub struct MovementSettings {
     pub speed: f32,
 }
 
+#[derive(Resource)]
+pub struct ExcludeMouseGrab(pub Rect);
+
+impl Default for ExcludeMouseGrab {
+    fn default() -> Self {
+        ExcludeMouseGrab(Rect::default())
+    }
+}
+
 impl Default for MovementSettings {
     fn default() -> Self {
         Self {
@@ -30,7 +39,6 @@ pub struct KeyBindings {
     pub move_right: KeyCode,
     pub move_ascend: KeyCode,
     pub move_descend: KeyCode,
-    pub toggle_grab_cursor: KeyCode,
 }
 
 impl Default for KeyBindings {
@@ -42,7 +50,6 @@ impl Default for KeyBindings {
             move_right: KeyCode::KeyD,
             move_ascend: KeyCode::Space,
             move_descend: KeyCode::ShiftLeft,
-            toggle_grab_cursor: KeyCode::Escape,
         }
     }
 }
@@ -56,7 +63,7 @@ pub struct FlyCam;
 fn toggle_grab_cursor(window: &mut Window) {
     match window.cursor_options.grab_mode {
         CursorGrabMode::None => {
-            window.cursor_options.grab_mode = CursorGrabMode::Confined;
+            window.cursor_options.grab_mode = CursorGrabMode::Locked;
             window.cursor_options.visible = false;
         }
         _ => {
@@ -165,12 +172,17 @@ fn player_look(
 }
 
 fn cursor_grab(
-    keys: Res<ButtonInput<KeyCode>>,
-    key_bindings: Res<KeyBindings>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    exclude_mouse_grab: Res<ExcludeMouseGrab>,
     mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
 ) {
     if let Ok(mut window) = primary_window.single_mut() {
-        if keys.just_pressed(key_bindings.toggle_grab_cursor) {
+        if let Some(cursor_pos) = window.cursor_position() {
+            if exclude_mouse_grab.0.contains(cursor_pos) {
+                return;
+            }
+        }
+        if mouse.just_pressed(MouseButton::Left) {
             toggle_grab_cursor(&mut window);
         }
     } else {
@@ -214,6 +226,7 @@ impl Plugin for NoCameraPlayerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<MovementSettings>()
             .init_resource::<KeyBindings>()
+            .init_resource::<ExcludeMouseGrab>()
             .add_systems(Startup, initial_grab_cursor)
             .add_systems(Startup, initial_grab_on_flycam_spawn)
             .add_systems(Update, player_move)

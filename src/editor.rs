@@ -4,16 +4,14 @@ use crate::renderer::{
     ChangedExpression, ChangedMaterial, FunctionIdCounter, FunctionParsingError, OffsetX, OffsetY,
     RebuildMesh, RenderAxis, RenderedFunction, Resolution, Scale, UpdateShader,
 };
-use bevy::app::{App, Plugin, Update};
+use bevy::app::{App, Plugin, Startup, Update};
 use bevy::pbr::NotShadowCaster;
 use bevy::prelude::{Commands, Entity, Mut, Query, ResMut};
+use bevy::render::view::NoFrustumCulling;
 use bevy_egui::egui::{Slider, Ui, Widget};
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{egui, EguiContexts, EguiGlobalSettings};
 use rand::random;
 use std::ops::RangeInclusive;
-use bevy::math::Rect;
-use bevy::render::view::NoFrustumCulling;
-use crate::player::ExcludeMouseGrab;
 
 pub struct FunctionEditorPlugin;
 
@@ -24,9 +22,13 @@ const OFFSET_RANGE: RangeInclusive<f32> = -10f32..=10f32;
 
 impl Plugin for FunctionEditorPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ExcludeMouseGrab>()
-            .add_systems(Update, function_editor);
+        app.add_systems(Startup, configure_egui);
+        app.add_systems(Update, function_editor);
     }
+}
+
+fn configure_egui(mut egui_global_settings: ResMut<EguiGlobalSettings>) {
+    egui_global_settings.enable_absorb_bevy_input_system = true;
 }
 
 fn function_editor(
@@ -39,10 +41,9 @@ fn function_editor(
     mut scale: ResMut<Scale>,
     mut reload_shaders: ResMut<UpdateShader>,
     mut render_axis: ResMut<RenderAxis>,
-    mut exclude_mouse_grab: ResMut<ExcludeMouseGrab>,
     function_id_counter: ResMut<FunctionIdCounter>,
 ) {
-    let window_bounds = egui::Window::new("Functions").show(contexts.ctx_mut(), |ui| {
+    egui::Window::new("Functions").show(contexts.ctx_mut(), |ui| {
         edit_functions_ui(
             &mut commands,
             &mut rendered_functions,
@@ -60,8 +61,7 @@ fn function_editor(
             &mut render_axis,
             ui,
         );
-    }).expect("couldn't create editor window").response.interact_rect;
-    *exclude_mouse_grab = ExcludeMouseGrab(Rect::new(window_bounds.min.x , window_bounds.min.y, window_bounds.max.x, window_bounds.max.y))
+    }).expect("couldn't create editor window");
 }
 
 fn edit_functions_ui(

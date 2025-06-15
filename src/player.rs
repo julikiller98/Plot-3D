@@ -12,14 +12,6 @@ pub struct MovementSettings {
     pub speed: f32,
 }
 
-#[derive(Resource)]
-pub struct ExcludeMouseGrab(pub Rect);
-
-impl Default for ExcludeMouseGrab {
-    fn default() -> Self {
-        ExcludeMouseGrab(Rect::default())
-    }
-}
 
 impl Default for MovementSettings {
     fn default() -> Self {
@@ -60,7 +52,7 @@ impl Default for KeyBindings {
 pub struct FlyCam;
 
 /// Grabs/ungrabs mouse cursor
-fn toggle_grab_cursor(window: &mut Window) {
+pub fn toggle_grab_cursor(window: &mut Window) {
     match window.cursor_options.grab_mode {
         CursorGrabMode::None => {
             window.cursor_options.grab_mode = CursorGrabMode::Locked;
@@ -173,36 +165,14 @@ fn player_look(
 
 fn cursor_grab(
     mouse: Res<ButtonInput<MouseButton>>,
-    exclude_mouse_grab: Res<ExcludeMouseGrab>,
     mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
 ) {
     if let Ok(mut window) = primary_window.single_mut() {
-        if let Some(cursor_pos) = window.cursor_position() {
-            if exclude_mouse_grab.0.contains(cursor_pos) {
-                return;
-            }
-        }
         if mouse.just_pressed(MouseButton::Left) {
             toggle_grab_cursor(&mut window);
         }
     } else {
         warn!("Primary window not found for `cursor_grab`!");
-    }
-}
-
-// Grab cursor when an entity with FlyCam is added
-fn initial_grab_on_flycam_spawn(
-    mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
-    query_added: Query<Entity, Added<FlyCam>>,
-) {
-    if query_added.is_empty() {
-        return;
-    }
-
-    if let Ok(window) = &mut primary_window.single_mut() {
-        toggle_grab_cursor(window);
-    } else {
-        warn!("Primary window not found for `initial_grab_cursor`!");
     }
 }
 
@@ -216,21 +186,6 @@ impl Plugin for PlayerPlugin {
             .add_systems(Startup, initial_grab_cursor)
             .add_systems(Update, player_move)
             .add_systems(Update, player_look)
-            .add_systems(Update, cursor_grab);
-    }
-}
-
-/// Same as [`PlayerPlugin`] but does not spawn a camera
-pub struct NoCameraPlayerPlugin;
-impl Plugin for NoCameraPlayerPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<MovementSettings>()
-            .init_resource::<KeyBindings>()
-            .init_resource::<ExcludeMouseGrab>()
-            .add_systems(Startup, initial_grab_cursor)
-            .add_systems(Startup, initial_grab_on_flycam_spawn)
-            .add_systems(Update, player_move)
-            .add_systems(Update, player_look)
-            .add_systems(Update, cursor_grab);
+            .add_systems(Update, cursor_grab.run_if(not(bevy_egui::input::egui_wants_any_input)));
     }
 }

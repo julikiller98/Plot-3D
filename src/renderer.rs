@@ -1,5 +1,5 @@
 use crate::functions::Function;
-use crate::wgsl::FunctionMaterial;
+use crate::wgsl::{setup_dynamic_shader, FunctionMaterial};
 use crate::{functions, wgsl};
 use bevy::pbr::{ExtendedMaterial, NotShadowCaster};
 use bevy::prelude::*;
@@ -26,23 +26,11 @@ impl Default for Scale {
     }
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct OffsetX(pub f32);
 
-impl Default for OffsetX {
-    fn default() -> Self {
-        Self(0.0)
-    }
-}
-
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct OffsetY(pub f32);
-
-impl Default for OffsetY {
-    fn default() -> Self {
-        Self(0.0)
-    }
-}
 
 #[derive(Resource)]
 pub struct Resolution(pub usize);
@@ -108,10 +96,10 @@ impl RenderedFunction {
 
 
     fn build_mesh(&self, options: MeshBuildOptions) -> Mesh {
-        let sample_rate = options.sample_rate;
+        let subdivisions = (options.sample_rate / 10).max(1) as u32;
         Plane3d::new(-Dir3::Y.as_vec3(), Vec2::new(SIZE, SIZE))
             .mesh()
-            .subdivisions(sample_rate as u32 / 10)
+            .subdivisions(subdivisions)
             .build()
     }
 }
@@ -126,11 +114,6 @@ fn check_axis_visibility(render_axis: Res<RenderAxis>,mut commands: Commands, ax
     }
 }
 
-fn other_visibility(mut commands: Commands, axis: Query<Entity, Without<Axis>>) {
-    for entity in axis.iter() {
-        commands.entity(entity).insert(Visibility::Visible);
-    }
-}
 
 
 fn recompile_changed_materials(
@@ -193,11 +176,11 @@ fn rebuild_changed_meshes(
 
 fn update_shader(
     mut update_shader: ResMut<UpdateShader>,
-    asset_server: Res<AssetServer>,
-    rendered_functions: Query<(Entity, &mut RenderedFunction)>,
+    rendered_functions: Query<& RenderedFunction>,
+    shaders: ResMut<Assets<Shader>>
 ) {
     if update_shader.0 {
-        wgsl::rebuild_shader_for_functions(rendered_functions, asset_server);
+        wgsl::rebuild_shader_for_functions(rendered_functions, shaders);
         update_shader.0 = false;
     }
 }
@@ -325,6 +308,7 @@ impl Plugin for RenderPlugin {
             .insert_resource(RenderAxis(false))
             .insert_resource(FunctionIdCounter(1))
             .add_systems(Startup, setup)
+            .add_systems(Startup, setup_dynamic_shader)
             .add_systems(
                 Update,
                 (
@@ -332,7 +316,6 @@ impl Plugin for RenderPlugin {
                     recompile_changed_materials,
                     rebuild_changed_meshes,
                     check_axis_visibility,
-                    other_visibility,
                     update_shader,
                 ),
             );

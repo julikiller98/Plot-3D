@@ -1,20 +1,19 @@
 #![feature(portable_simd)]
 
+use crate::editor::FunctionEditorPlugin;
+use crate::player::PlayerPlugin;
 use crate::renderer::RenderPlugin;
+use crate::wgsl::FunctionMaterial;
 use bevy::app::{App, PluginGroup};
 use bevy::asset::AssetApp;
-use bevy::asset::io::{AssetSource, AssetSourceId};
 use bevy::color::Color;
-use bevy::DefaultPlugins;
 use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
 use bevy::pbr::{ExtendedMaterial, MaterialPlugin, StandardMaterial};
 use bevy::prelude::{MonitorSelection, TextFont};
 use bevy::text::FontSmoothing;
 use bevy::utils::default;
 use bevy::window::{Window, WindowMode, WindowPlugin};
-use crate::editor::FunctionEditorPlugin;
-use crate::player::PlayerPlugin;
-use crate::wgsl::{CustomShaderProvider, FunctionMaterial};
+use bevy::DefaultPlugins;
 
 mod functions;
 mod renderer;
@@ -25,10 +24,6 @@ mod player;
 
 pub fn main() {
     App::new()
-        .register_asset_source(
-            AssetSourceId::from_static("customshader"),
-            AssetSource::build().with_reader(|| {Box::new(CustomShaderProvider::new())})
-        )
         .add_plugins((
             DefaultPlugins.set(WindowPlugin{
                 primary_window: Some(

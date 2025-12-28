@@ -23,7 +23,7 @@ pub fn parse_anita_fn(fn_string: String) -> Result<Function, String> {
                 }
                 Expr::Call { identifier, args } => {
                     match identifier.as_str() {
-                        "sin" | "cos" | "tan" | "cosh" | "sinh" | "asin" | "acos" | "atan" => {
+                        "sin" | "cos" | "tan" | "cosh" | "sinh" |  "asin" | "acos" | "atan" | "abs" | "sqrt" => {
                             if args.len() != 1 {
                                 error = Some(format!("Wrong argument count on {}", identifier));
                             }

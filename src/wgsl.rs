@@ -1,26 +1,20 @@
-use std::path::{Path};
 use std::sync::{LazyLock, Mutex};
-use bevy::asset::{Asset, AssetServer};
-use bevy::asset::io::{AssetReader, AssetReaderError, PathStream, Reader};
-use bevy::asset::io::memory::{Dir, MemoryAssetReader};
+use bevy::asset::weak_handle;
+use bevy::prelude::*;
 use bevy::pbr::MaterialExtension;
-use bevy::prelude::{Entity, Query, Res, TypePath};
 use bevy::render::render_resource::{AsBindGroup, ShaderRef};
+use bevy::render::render_asset::RenderAssetUsages;
 use crate::renderer::RenderedFunction;
 
+pub const DYNAMIC_SHADER_HANDLE: Handle<Shader> = weak_handle!("35f8c75b-73ef-49af-b50c-920d48c19ef3");
 
-const CUSTOM_SHADER_NAME: &str  = "shader.wgsl";
-
-const SHADER_ASSET_PATH: &str = "customshader://shader.wgsl";
-
-const SHADER_TEMPLATE_PATH: &str = include_str!("../assets/shaders/shader_template.wgsl");
-
+const SHADER_TEMPLATE: &str = include_str!("../assets/shaders/shader_template.wgsl");
 const FUNCTION_INJECTION_KEY: &str = "{{FUNCTIONS}}";
 
-static POPULATED_TEMPLATE_SHADER: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new(String::new()));
-
+// 2. The Material Definition
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct FunctionMaterial {
+    // Note: Grouping uniforms is usually cleaner, but your way works too.
     #[uniform(100)]
     pub function_id: u32,
     #[uniform(100)]
@@ -31,69 +25,38 @@ pub struct FunctionMaterial {
     pub offset_y: f32,
 }
 
-pub fn rebuild_shader_for_functions(rendered_functions: Query<(Entity, &mut RenderedFunction)>,asset_server: Res<AssetServer>){
-    *POPULATED_TEMPLATE_SHADER.lock().expect("could not optain mutex to shader template") = populate_template_shader(rendered_functions);
-    asset_server.reload(SHADER_ASSET_PATH);
-}
-
-fn populate_template_shader(rendered_functions: Query<(Entity, &mut RenderedFunction)>) -> String {
-    let functions = rendered_functions.iter().map(|(_entity, rendered_function)| {
-        format!("if id == {} {{ z = {};}}", rendered_function.function_id, rendered_function.function.expression.to_string())
-    }).reduce(|a, b| format!("{}\n    {}", a, b)).unwrap_or(String::from(""));
-    SHADER_TEMPLATE_PATH.to_string().replace(FUNCTION_INJECTION_KEY, functions.as_str())
-}
-
-
 impl MaterialExtension for FunctionMaterial {
     fn vertex_shader() -> ShaderRef {
-        SHADER_ASSET_PATH.into()
+        // 3. Return the Fixed Handle instead of a path
+        ShaderRef::Handle(DYNAMIC_SHADER_HANDLE)
     }
 
 }
 
-pub struct CustomShaderProvider {
-    memory_asset_reader: MemoryAssetReader
+// 4. The System
+pub fn rebuild_shader_for_functions(
+    rendered_functions: Query<&RenderedFunction>,
+    mut shaders: ResMut<Assets<Shader>>,
+) {
+    let mut function_body = String::new();
+    function_body.push_str("switch id {\n");
+    for func in rendered_functions.iter() {
+        function_body.push_str(&format!(
+            "    case {}u: {{ z = {}; }}\n",
+            func.function_id,
+            func.function.expression.to_string()
+        ));
+    }
+    function_body.push_str("    default: { z = 0.0; }\n");
+    function_body.push_str("}\n");
+
+    let final_code = SHADER_TEMPLATE.replace(FUNCTION_INJECTION_KEY, &function_body);
+    let shader = Shader::from_wgsl(final_code, "dynamic_shader.wgsl");
+    shaders.insert(DYNAMIC_SHADER_HANDLE.id(), shader);
 }
 
-impl CustomShaderProvider {
-    pub fn new() -> Self{
-        let root= Dir::default();
-        root.insert_asset(CUSTOM_SHADER_NAME.as_ref(), Self::populated_shader_bytes());
-        CustomShaderProvider{
-            memory_asset_reader: MemoryAssetReader{
-                root
-            }
-        }
-    }
-
-    fn populated_shader_bytes() -> Vec<u8> {
-        let mut populated_shader =  POPULATED_TEMPLATE_SHADER.lock().expect("could not optain mutex to shader template");
-        if populated_shader.is_empty() {
-            *populated_shader = SHADER_TEMPLATE_PATH.to_string().replace(FUNCTION_INJECTION_KEY, "".as_ref());
-        }
-        populated_shader.as_bytes().to_vec()
-    }
-}
-
-
-impl AssetReader for CustomShaderProvider {
-    async fn read<'a>(&'a self, path: &'a Path) -> Result<impl Reader + 'a, AssetReaderError> {
-        self.memory_asset_reader.root.insert_asset(path, Self::populated_shader_bytes());
-        self.memory_asset_reader.read(path).await
-    }
-
-    async fn read_meta<'a>(&'a self, path: &'a Path) -> Result<impl Reader + 'a, AssetReaderError> {
-        self.memory_asset_reader.read_meta(path).await
-    }
-
-    async fn read_directory<'a>(
-        &'a self,
-        path: &'a Path,
-    ) -> Result<Box<PathStream>, AssetReaderError> {
-        self.memory_asset_reader.read_directory(path).await
-    }
-
-    async fn is_directory<'a>(&'a self, path: &'a Path) -> Result<bool, AssetReaderError> {
-        self.memory_asset_reader.is_directory(path).await
-    }
+pub fn setup_dynamic_shader(mut shaders: ResMut<Assets<Shader>>) {
+    let initial_code = SHADER_TEMPLATE.replace(FUNCTION_INJECTION_KEY, "z = 0.0;");
+    let shader = Shader::from_wgsl(initial_code, "dynamic_shader.wgsl");
+    shaders.insert(DYNAMIC_SHADER_HANDLE.id(), shader);
 }

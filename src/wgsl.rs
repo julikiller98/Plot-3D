@@ -7,14 +7,12 @@ use bevy::render::render_asset::RenderAssetUsages;
 use crate::renderer::RenderedFunction;
 
 pub const DYNAMIC_SHADER_HANDLE: Handle<Shader> = weak_handle!("35f8c75b-73ef-49af-b50c-920d48c19ef3");
-
 const SHADER_TEMPLATE: &str = include_str!("../assets/shaders/shader_template.wgsl");
 const FUNCTION_INJECTION_KEY: &str = "{{FUNCTIONS}}";
 
-// 2. The Material Definition
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct FunctionMaterial {
-    // Note: Grouping uniforms is usually cleaner, but your way works too.
+
     #[uniform(100)]
     pub function_id: u32,
     #[uniform(100)]
@@ -27,13 +25,11 @@ pub struct FunctionMaterial {
 
 impl MaterialExtension for FunctionMaterial {
     fn vertex_shader() -> ShaderRef {
-        // 3. Return the Fixed Handle instead of a path
         ShaderRef::Handle(DYNAMIC_SHADER_HANDLE)
     }
 
 }
 
-// 4. The System
 pub fn rebuild_shader_for_functions(
     rendered_functions: Query<&RenderedFunction>,
     mut shaders: ResMut<Assets<Shader>>,

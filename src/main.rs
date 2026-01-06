@@ -5,9 +5,8 @@ use crate::player::PlayerPlugin;
 use crate::renderer::RenderPlugin;
 use crate::wgsl::FunctionMaterial;
 use bevy::app::{App, PluginGroup};
-use bevy::asset::AssetApp;
 use bevy::color::Color;
-use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
+use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig};
 use bevy::pbr::{ExtendedMaterial, MaterialPlugin, StandardMaterial};
 use bevy::prelude::{MonitorSelection, TextFont};
 use bevy::text::FontSmoothing;
@@ -45,11 +44,15 @@ pub fn main() {
                     },
                     text_color: Color::WHITE,
                     enabled: true,
+                    frame_time_graph_config: FrameTimeGraphConfig{
+                        enabled: false,
+                        ..default()
+                    },
                     ..default()
                 },
             },
             PlayerPlugin,
-            bevy_egui::EguiPlugin{ enable_multipass_for_primary_context: false },
+            bevy_egui::EguiPlugin::default(),
             MaterialPlugin::<ExtendedMaterial<StandardMaterial, FunctionMaterial>>::default(),
             RenderPlugin,
             FunctionEditorPlugin

@@ -1,14 +1,11 @@
 #import bevy_pbr::mesh_functions::{get_world_from_local, mesh_position_local_to_clip}
-#import bevy_pbr::forward_io::{
-    Vertex,
-    VertexOutput
-}
 #import bevy_pbr::mesh_view_bindings::globals,
 #import bevy_pbr::{
     mesh_bindings::mesh,
     mesh_functions,
     skinning,
     morph::morph,
+    forward_io::{Vertex, VertexOutput},
     view_transformations::position_world_to_clip,
 }
 
@@ -19,7 +16,7 @@ struct FunctionMaterial {
     offset_y: f32
 }
 
-@group(2) @binding(100)
+@group(3) @binding(100)
 var<uniform> function_material: FunctionMaterial;
 
 #ifdef MORPH_TARGETS
@@ -58,12 +55,18 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     var vertex = vertex_shifted;
 #endif
 
+    let mesh_world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
+
 #ifdef SKINNED
-    var world_from_local = skinning::skin_model(vertex.joint_indices, vertex.joint_weights);
+    var world_from_local = skinning::skin_model(
+        vertex.joint_indices,
+        vertex.joint_weights,
+        vertex_no_morph.instance_index
+    );
 #else
     // Use vertex_no_morph.instance_index instead of vertex.instance_index to work around a wgpu dx12 bug.
     // See https://github.com/gfx-rs/naga/issues/2416 .
-    var world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
+    var world_from_local = mesh_world_from_local;
 #endif
 
 #ifdef VERTEX_NORMALS
@@ -113,7 +116,7 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
 
 #ifdef VISIBILITY_RANGE_DITHER
     out.visibility_range_dither = mesh_functions::get_visibility_range_dither_level(
-        vertex_no_morph.instance_index, world_from_local[3]);
+        vertex_no_morph.instance_index, mesh_world_from_local[3]);
 #endif
 
     return out;
@@ -131,7 +134,7 @@ fn f(ix: f32, iy: f32) -> f32{
     var z = 0.0;
     {{FUNCTIONS}}
     return z;
-}
+    }
 
 fn calc_normal(x: f32, y: f32) -> vec3<f32>{
     const dx = 0.001;

@@ -4,12 +4,12 @@ use crate::renderer::{
     ChangedExpression, ChangedMaterial, FunctionIdCounter, FunctionParsingError, OffsetX, OffsetY,
     RebuildMesh, RenderAxis, RenderedFunction, Resolution, Scale, UpdateShader,
 };
-use bevy::app::{App, Plugin, Startup, Update};
-use bevy::pbr::NotShadowCaster;
+use bevy::app::{App, Plugin, Startup};
+use bevy::camera::visibility::NoFrustumCulling;
+use bevy::light::NotShadowCaster;
 use bevy::prelude::{Commands, Entity, Mut, Query, ResMut};
-use bevy::render::view::NoFrustumCulling;
 use bevy_egui::egui::{Slider, Ui, Widget};
-use bevy_egui::{egui, EguiContexts, EguiGlobalSettings};
+use bevy_egui::{egui, EguiContexts, EguiGlobalSettings, EguiPrimaryContextPass};
 use rand::random;
 use std::ops::RangeInclusive;
 
@@ -23,7 +23,7 @@ const OFFSET_RANGE: RangeInclusive<f32> = -10f32..=10f32;
 impl Plugin for FunctionEditorPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, configure_egui);
-        app.add_systems(Update, function_editor);
+        app.add_systems(EguiPrimaryContextPass, function_editor);
     }
 }
 
@@ -43,7 +43,7 @@ fn function_editor(
     mut render_axis: ResMut<RenderAxis>,
     function_id_counter: ResMut<FunctionIdCounter>,
 ) {
-    egui::Window::new("Functions").show(contexts.ctx_mut(), |ui| {
+    egui::Window::new("Functions").show(contexts.ctx_mut().expect("could not get ctx_mut"), |ui| {
         edit_functions_ui(
             &mut commands,
             &mut rendered_functions,

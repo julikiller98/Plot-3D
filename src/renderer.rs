@@ -1,10 +1,11 @@
+use bevy::camera::visibility::NoFrustumCulling;
+use bevy::light::NotShadowCaster;
+use bevy::mesh::CylinderMeshBuilder;
 use crate::functions::Function;
 use crate::wgsl::{setup_dynamic_shader, FunctionMaterial};
 use crate::{functions, wgsl};
-use bevy::pbr::{ExtendedMaterial, NotShadowCaster};
+use bevy::pbr::{ExtendedMaterial};
 use bevy::prelude::*;
-use bevy::render::mesh::CylinderMeshBuilder;
-use bevy::render::view::NoFrustumCulling;
 use rand::random;
 
 const SIZE: f32 = 10.0;

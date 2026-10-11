@@ -149,7 +149,7 @@ fn recompile_changed_expressions(
     mut update_shader: ResMut<UpdateShader>,
 ) {
     for (entity, mut rendered_function) in rendered_functions.iter_mut() {
-        update_shader.0 = update_shader.0 | append_expression_mesh(
+        update_shader.0 |= append_expression_mesh(
             &mut commands.entity(entity).remove::<ChangedExpression>(),
             &mut meshes,
             &mut rendered_function,
@@ -275,7 +275,7 @@ fn setup(
         DirectionalLight {
             color: Color::WHITE,
             illuminance: 10000.0,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             ..default()
         },
         Transform::from_xyz(0.0, 10.0, 0.0).looking_at(Vec3::ZERO, Vec3::Z),
@@ -300,6 +300,7 @@ pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut App) {
+        
         app
             .init_resource::<Resolution>()
             .init_resource::<OffsetX>()

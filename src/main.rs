@@ -1,16 +1,14 @@
-#![feature(portable_simd)]
-
 use crate::editor::FunctionEditorPlugin;
 use crate::player::PlayerPlugin;
+use bevy::prelude::default;
 use crate::renderer::RenderPlugin;
 use crate::wgsl::FunctionMaterial;
 use bevy::app::{App, PluginGroup};
 use bevy::color::Color;
-use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin, FrameTimeGraphConfig};
+use bevy::dev_tools::fps_overlay::{FpsOverlayPlugin,FpsOverlayConfig, FrameTimeGraphConfig};
 use bevy::pbr::{ExtendedMaterial, MaterialPlugin, StandardMaterial};
 use bevy::prelude::{MonitorSelection, TextFont};
-use bevy::text::FontSmoothing;
-use bevy::utils::default;
+use bevy::text::{FontSize, FontSmoothing};
 use bevy::window::{Window, WindowMode, WindowPlugin};
 use bevy::DefaultPlugins;
 
@@ -37,7 +35,7 @@ pub fn main() {
             FpsOverlayPlugin {
                 config: FpsOverlayConfig {
                     text_config: TextFont {
-                        font_size: 10.0,
+                        font_size: FontSize::Px(10.0),
                         font: default(),
                         font_smoothing: FontSmoothing::default(),
                         ..default()

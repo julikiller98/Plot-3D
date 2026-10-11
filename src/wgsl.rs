@@ -6,7 +6,7 @@ use bevy::shader::ShaderRef;
 use crate::renderer::RenderedFunction;
 
 pub const DYNAMIC_SHADER_HANDLE: Handle<Shader> = uuid_handle!("35f8c75b-73ef-49af-b50c-920d48c19ef3");
-const SHADER_TEMPLATE: &str = include_str!("../assets/shaders/shader_template.wgsl");
+const SHADER_TEMPLATE: &str = include_str!("../assets/shaders/shader_template.wesl");
 const FUNCTION_INJECTION_KEY: &str = "{{FUNCTIONS}}";
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -45,13 +45,13 @@ pub fn rebuild_shader_for_functions(
     function_body.push_str("    default: { z = 0.0; }\n");
     function_body.push_str("}\n");
 
-    let final_code = SHADER_TEMPLATE.replace(FUNCTION_INJECTION_KEY, &function_body);
-    let shader = Shader::from_wgsl(final_code, "dynamic_shader.wgsl");
+    let final_code = SHADER_TEMPLATE.replace(FUNCTION_INJECTION_KEY, function_body.as_str());
+    let shader = Shader::from_wesl(final_code, "embedded://math_utils/dynamic_shader.wgsl");
     let _ = shaders.insert(DYNAMIC_SHADER_HANDLE.id(), shader);
 }
 
 pub fn setup_dynamic_shader(mut shaders: ResMut<Assets<Shader>>) {
     let initial_code = SHADER_TEMPLATE.replace(FUNCTION_INJECTION_KEY, "z = 0.0;");
-    let shader = Shader::from_wgsl(initial_code, "dynamic_shader.wgsl");
+    let shader = Shader::from_wesl(initial_code, "embedded://math_utils/dynamic_shader.wgsl");
     let _ = shaders.insert(DYNAMIC_SHADER_HANDLE.id(), shader);
 }

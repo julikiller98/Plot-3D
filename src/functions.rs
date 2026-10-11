@@ -9,7 +9,7 @@ impl Function {
 
 pub fn parse_anita_fn(fn_string: String) -> Result<Function, String> {
     let expression = Expr::parse_string(fn_string).map_err(|err| err.to_string())?;
-    let mut error = None;
+    let mut error_option = None;
     expression.walk(
         &mut |expr: &Expr| {
             match expr {
@@ -17,7 +17,7 @@ pub fn parse_anita_fn(fn_string: String) -> Result<Function, String> {
                     match identifier.as_str() {
                         "x" | "y" | "t" | "e" | "pi" => {}
                         var => {
-                            error = Some(format!("Use of undefinied var {}", var));
+                            error_option = Some(format!("Use of undefinied var {}", var));
                         }
                     }
                 }
@@ -25,11 +25,11 @@ pub fn parse_anita_fn(fn_string: String) -> Result<Function, String> {
                     match identifier.as_str() {
                         "sin" | "cos" | "tan" | "cosh" | "sinh" |  "asin" | "acos" | "atan" | "abs" | "sqrt" => {
                             if args.len() != 1 {
-                                error = Some(format!("Wrong argument count on {}", identifier));
+                                error_option = Some(format!("Wrong argument count on {}", identifier));
                             }
                         }
                         identifier => {
-                            error = Some(format!("Unknown function {}", identifier));
+                            error_option = Some(format!("Unknown function {}", identifier));
                         }
                     }
                 }
@@ -37,9 +37,9 @@ pub fn parse_anita_fn(fn_string: String) -> Result<Function, String> {
             }
         }
     );
-    if error.is_none() {
-        Ok(Function {expression})
+    if let Some(error) = error_option {
+        Err(error)
     } else {
-        Err(error.unwrap())
+        Ok(Function { expression })
     }
 }

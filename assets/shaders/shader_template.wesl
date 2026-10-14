@@ -1,15 +1,13 @@
 import bevy_pbr::render::{
-    mesh_functions::{get_world_from_local, mesh_position_local_to_clip},
-    mesh_view_bindings::globals,
     mesh_functions,
+    mesh_view_bindings::globals,
     forward_io::{Vertex, VertexOutput},
-    view_transformations::position_world_to_clip
-};
-import bevy_pbr::{
+    view_transformations::position_world_to_clip,
     mesh_bindings::mesh,
     skinning,
-    morph::morph
+    morph,
 };
+
 struct FunctionMaterial {
     function_id: u32,
     scale: f32,
@@ -17,7 +15,7 @@ struct FunctionMaterial {
     offset_y: f32,
 };
 
-@group(3) @binding(100)
+@group(constants::MATERIAL_BIND_GROUP) @binding(100)
 var<uniform> function_material: FunctionMaterial;
 
 @if(MORPH_TARGETS)
@@ -26,18 +24,18 @@ fn morph_vertex(vertex_in: Vertex) -> Vertex {
     let first_vertex = mesh[vertex.instance_index].first_vertex_index;
     let vertex_index = vertex.index - first_vertex;
 
-    let weight_count = bevy_pbr::morph::layer_count();
-    for (var i: u32 = 0u; i < weight_count; i ++) {
-        let weight = bevy_pbr::morph::weight_at(i);
+    let weight_count = morph::layer_count();
+    for (var i: u32 = 0u; i < weight_count; i++) {
+        let weight = morph::weight_at(i);
         if weight == 0.0 {
             continue;
         }
-        vertex.position += weight * morph(vertex_index, bevy_pbr::morph::position_offset, i);
+        vertex.position += weight * morph::morph(vertex_index, morph::position_offset, i);
         @if(VERTEX_NORMALS) {
-            vertex.normal += weight * morph(vertex_index, bevy_pbr::morph::normal_offset, i);
+            vertex.normal += weight * morph::morph(vertex_index, morph::normal_offset, i);
         }
         @if(VERTEX_TANGENTS) {
-            vertex.tangent += vec4(weight * morph(vertex_index, bevy_pbr::morph::tangent_offset, i), 0.0);
+            vertex.tangent += vec4(weight * morph::morph(vertex_index, morph::tangent_offset, i), 0.0);
         }
     }
     return vertex;
@@ -50,26 +48,22 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     vertex_shifted.position.y = vertex_shifted.position.y + f(vertex_shifted.position.x, vertex_shifted.position.z);
     vertex_shifted.normal = calc_normal(vertex_shifted.position.x, vertex_shifted.position.z);
 
+    var vertex = vertex_shifted;
     @if(MORPH_TARGETS) {
-        var vertex = morph_vertex(vertex_shifted);
-    }
-    @else {
-        var vertex = vertex_shifted;
+        vertex = morph_vertex(vertex);
     }
 
     let mesh_world_from_local = mesh_functions::get_world_from_local(vertex_no_morph.instance_index);
 
+    // Use vertex_no_morph.instance_index instead of vertex.instance_index to work around a wgpu dx12 bug.
+    // See https://github.com/gfx-rs/naga/issues/2416 .
+    var world_from_local = mesh_world_from_local;
     @if(SKINNED) {
-        var world_from_local = skinning::skin_model(
+        world_from_local = skinning::skin_model(
             vertex.joint_indices,
             vertex.joint_weights,
             vertex_no_morph.instance_index
         );
-    }
-    @else {
-        // Use vertex_no_morph.instance_index instead of vertex.instance_index to work around a wgpu dx12 bug.
-        // See https://github.com/gfx-rs/naga/issues/2416 .
-        var world_from_local = mesh_world_from_local;
     }
 
     @if(VERTEX_NORMALS) {
@@ -79,8 +73,6 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
         @else {
             out.world_normal = mesh_functions::mesh_normal_local_to_world(
                 vertex.normal,
-                // Use vertex_no_morph.instance_index instead of vertex.instance_index to work around a wgpu dx12 bug.
-                // See https://github.com/gfx-rs/naga/issues/2416
                 vertex_no_morph.instance_index
             );
         }
@@ -102,8 +94,6 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
         out.world_tangent = mesh_functions::mesh_tangent_local_to_world(
             world_from_local,
             vertex.tangent,
-            // Use vertex_no_morph.instance_index instead of vertex.instance_index to work around a wgpu dx12 bug.
-            // See https://github.com/gfx-rs/naga/issues/2416
             vertex_no_morph.instance_index
         );
     }
@@ -113,8 +103,6 @@ fn vertex(vertex_no_morph: Vertex) -> VertexOutput {
     }
 
     @if(VERTEX_OUTPUT_INSTANCE_INDEX) {
-        // Use vertex_no_morph.instance_index instead of vertex.instance_index to work around a wgpu dx12 bug.
-        // See https://github.com/gfx-rs/naga/issues/2416
         out.instance_index = vertex_no_morph.instance_index;
     }
 
@@ -139,8 +127,11 @@ fn f(ix: f32, iy: f32) -> f32 {
     return z;
 }
 
-fn calc_normal(x: f32, y: f32) -> vec3<f32>{
+fn calc_normal(x: f32, y: f32) -> vec3<f32> {
     const dx = 0.001;
     const dy = 0.001;
-    return normalize(cross(vec3f(dx, abs(f(x + dx,y) - f(x,y)),0), vec3f(0, abs(f(x,y+dx) - f(x,y)),dy)));
+    let f0 = f(x, y);
+    let tx = vec3f(dx, f(x + dx, y) - f0, 0.0);
+    let ty = vec3f(0.0, f(x, y + dy) - f0, dy);
+    return normalize(cross(tx, ty));
 }

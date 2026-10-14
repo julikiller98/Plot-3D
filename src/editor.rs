@@ -7,11 +7,13 @@ use crate::renderer::{
 use bevy::app::{App, Plugin, Startup};
 use bevy::camera::visibility::NoFrustumCulling;
 use bevy::light::NotShadowCaster;
-use bevy::prelude::{Commands, Entity, Mut, Query, ResMut};
+use bevy::prelude::{Commands, Entity, Mut, Query, ResMut, Transform, With};
 use bevy_egui::egui::{Slider, Ui, Widget};
 use bevy_egui::{egui, EguiContexts, EguiGlobalSettings, EguiPrimaryContextPass};
 use rand::random;
 use std::ops::RangeInclusive;
+use bevy::math::Vec3;
+use crate::player::FlyCam;
 
 pub struct FunctionEditorPlugin;
 
@@ -35,6 +37,7 @@ fn function_editor(
     mut contexts: EguiContexts,
     mut commands: Commands,
     mut rendered_functions: Query<(Entity, &mut RenderedFunction, Option<&FunctionParsingError>)>,
+    player_pos: Query<&Transform, With<FlyCam>>,
     mut resolution: ResMut<Resolution>,
     mut offset_x: ResMut<OffsetX>,
     mut offset_y: ResMut<OffsetY>,
@@ -61,6 +64,8 @@ fn function_editor(
             &mut render_axis,
             ui,
         );
+        let cam_pos = player_pos.iter().next().map(|t| t.translation);
+        ui.label("Camera position:".to_string() + &cam_pos.unwrap_or(Vec3::ZERO).to_string())
     }).expect("couldn't create editor window");
 }
 

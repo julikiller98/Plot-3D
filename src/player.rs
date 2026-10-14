@@ -77,7 +77,7 @@ fn setup_player(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
         FlyCam,
-        Transform::from_xyz(-2.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(-18.0, 18.0, -20.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 }
 

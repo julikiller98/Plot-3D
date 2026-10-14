@@ -280,12 +280,11 @@ fn setup(
         },
         Transform::from_xyz(0.0, 10.0, 0.0).looking_at(Vec3::ZERO, Vec3::Z),
     ));
-    let default_fn_expression_0 = "e ** (x * sin(y))".to_string();
-    let default_fn_expression_1 = "e ** (x * sin(y + t))".to_string();
+    let default_fn_expression = "sin(x * y + t) + cos(x + y + t)".to_string();
     commands.spawn((
         RenderedFunction {
-            function: functions::parse_anita_fn(default_fn_expression_0.clone()).expect("default function should be valid"),
-            expression: default_fn_expression_1,
+            function: functions::parse_anita_fn(default_fn_expression.clone()).expect("default function should be valid"),
+            expression: default_fn_expression,
             color: [random(), random(), random()],
             function_id: function_id_counter.next_id(),
         },
